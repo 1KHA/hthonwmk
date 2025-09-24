@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/../../components/ui/toaster";
 import { AuthProvider } from "@/contexts/auth-context";
 import { Analytics } from "@vercel/analytics/next";
+import { AdminToaster } from "@/components/admin/admin-toaster";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -76,6 +77,7 @@ export default function RootLayout({
         <AuthProvider>
           {children}
           <Toaster />
+          <AdminToaster />
           <Analytics />
         </AuthProvider>
       </body>
