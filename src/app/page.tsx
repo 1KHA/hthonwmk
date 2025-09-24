@@ -1,274 +1,142 @@
-"use client";
-import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
-import { useState, useEffect } from "react";
-import Head from "next/head";
-import Loader from "@/components/ui/loader";
+'use client'
 
-const CountdownTimer = dynamic(() => import("@/components/ui/countdown-timer"), { ssr: false });
-const ImageCarousel = dynamic(() => import("@/components/ui/image-carousel"), { ssr: false });
-const FAQSection = dynamic(() => import("@/components/ui/faq-section"), { ssr: false });
-const MasarMobileSection = dynamic(() => import("@/components/ui/masar-mobile-section"), { ssr: false });
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
+import { showAdminToast } from '@/components/admin/admin-toaster'
+import { useAuth } from '@/contexts/auth-context'
 
-export default function HomePage() {
-  const router = useRouter();
-  const [topPosition, setTopPosition] = useState("20%");
-  const [countdownTopPosition, setCountdownTopPosition] = useState("12%");
-  const [boxHeight, setBoxHeight] = useState("500px");
-  const [showLoader, setShowLoader] = useState(true);
-  const [loaderVisible, setLoaderVisible] = useState(true);
-  const [contentVisible, setContentVisible] = useState(false);
+export default function LoginPage() {
+  const router = useRouter()
+  const { login, user, isLoading: authLoading } = useAuth()
+  const [isLoading, setIsLoading] = useState(false)
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  })
 
-  // Loader timer effect
+  // Redirect if already authenticated
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setLoaderVisible(false);
-      // Start content fade in after loader starts fading out
-      setTimeout(() => {
-        setShowLoader(false);
-        setContentVisible(true);
-      }, 300); // Wait for loader fade out to complete
-    }, 1500); // 1.5 seconds
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    const handleResize = () => {
-      // Manual breakpoints for each 200px range from smallest to largest
-      if (window.innerWidth < 520) {
-        // Mobile phones (320-519px)
-        setTopPosition("17%");
-        setCountdownTopPosition("10%");
-        setBoxHeight("350px");
-      } else if (window.innerWidth < 636) {
-        // Large phones / Small tablets (521-635px)
-        setTopPosition("6%");
-        setCountdownTopPosition("6.5%");
-        setBoxHeight("400px");
-      } else if (window.innerWidth < 720) {
-        // Small tablets (636-719px)
-        setTopPosition("6%");
-        setCountdownTopPosition("7%");
-        setBoxHeight("400px");
-      } else if (window.innerWidth < 920) {
-        // Tablets (720-919px)
-        setTopPosition("9%");
-        setCountdownTopPosition("7%");
-        setBoxHeight("450px");
-      } else if (window.innerWidth < 1120) {
-        // Small laptops (920-1119px)
-        setTopPosition("10%");
-        setCountdownTopPosition("7.5%");
-        setBoxHeight("480px");
-      } else if (window.innerWidth < 1320) {
-        // Medium laptops (1120-1319px)
-        setTopPosition("13%");
-        setCountdownTopPosition("8%");
-        setBoxHeight("500px");
-      } else if (window.innerWidth < 1520) {
-        // Large laptops (1320-1519px)
-        setTopPosition("14%");
-        setCountdownTopPosition("8%");
-        setBoxHeight("500px");
-      } else if (window.innerWidth < 1720) {
-        // Desktop monitors (1520-1719px)
-        setTopPosition("15%");
-        setCountdownTopPosition("9%");
-        setBoxHeight("500px");
-      } else if (window.innerWidth < 1920) {
-        // Large desktop monitors (1720-1919px)
-        setTopPosition("16%");
-        setCountdownTopPosition("9%");
-        setBoxHeight("500px");
-      } else {
-        // Ultra-wide monitors (1920px+)
-        setTopPosition("16%");
-        setCountdownTopPosition("9%");
-        setBoxHeight("500px");
-      }
-    };
-
-    // Set initial position
-    handleResize();
-
-    // Add event listener
-    window.addEventListener('resize', handleResize);
-
-    // Cleanup
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const handleYellowBoxClick = () => {
-    router.push('/register-team');
-  };
-
-  // Add structured data for SEO
-  useEffect(() => {
-    const structuredData = {
-      "@context": "https://schema.org",
-      "@type": "Event",
-      "name": "جائزة مايدة محي الدين ناظر للابتكار 3",
-      "description": "تحدي يجمع طلبة الجامعات لاستكشاف وتوظيف الابتكارات الجامعية، توفر جائزة مايـدة محي الديـــن ناظـــر للابتكــــار هاكاثون الابتكار فرصة للعمل ضمن فرق تنافسية على تطوير حلول مبتكرة تسهم في تعزيز الاستدامة وجودة الحيـاة",
-      "organizer": {
-        "@type": "Organization",
-        "name": "جامعة دار الحكمة",
-        "url": "https://dah.edu.sa"
-      },
-      "location": {
-        "@type": "Place",
-        "name": "جامعة دار الحكمة",
-        "address": {
-          "@type": "PostalAddress",
-          "addressLocality": "جدة",
-          "addressCountry": "SA"
-        }
-      },
-      "keywords": [
-        "جائزة مايدة محي الدين ناظر للابتكار 3",
-        "جائزة مايدة محي الدين ناظر للابتكار",
-        "جائزة مايدة",
-        "هاكاثون الابتكار",
-        "دار الحكمة",
-        "جامعة دار الحكمة",
-        "تحدي يجمع طلبة الجامعات لاستكشاف وتوظيف الابتكارات الجامعية",
-        "الاستدامة",
-        "جودة الحياة"
-      ],
-      "eventStatus": "https://schema.org/EventScheduled",
-      "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
-      "url": "https://dar-alhekma.dyam.dev/"
-    };
-
-    const script = document.createElement('script');
-    script.type = 'application/ld+json';
-    script.text = JSON.stringify(structuredData);
-    document.head.appendChild(script);
-
-    return () => {
-      // Cleanup: remove the script when component unmounts
-      const scripts = document.head.querySelectorAll('script[type="application/ld+json"]');
-      scripts.forEach(s => {
-        if (s.textContent?.includes('جائزة مايدة محي الدين ناظر للابتكار 3')) {
-          document.head.removeChild(s);
-        }
-      });
-    };
-  }, []);
-
-  return (
-    <>
-      {/* Loader with smooth fade out */}
-      {showLoader && <Loader isVisible={loaderVisible} />}
+    if (authLoading) return;
+    
+    if (user) {
+      console.log('✅ User already logged in:', user.role);
       
-      {/* Main content with smooth fade in */}
-      <div 
-        className={`transition-opacity duration-500 ${contentVisible ? 'opacity-100' : 'opacity-0'}`}
-        style={{ width: "100%", minHeight: "100vh", position: "relative", margin: 0, padding: 0 }}
-      >
-      {/* SEO Content - Hidden but readable by search engines */}
-      <div style={{ 
-        position: "absolute", 
-        left: "-9999px", 
-        width: "1px", 
-        height: "1px", 
-        overflow: "hidden" 
-      }}>
-        <h1>جائزة مايدة محي الدين ناظر للابتكار 3</h1>
-        <h2>هاكاثون الابتكار في جامعة دار الحكمة</h2>
-        <p>
-          تحدي يجمع طلبة الجامعات لاستكشاف وتوظيف الابتكارات الجامعية، توفر جائزة مايـدة محي الديـــن ناظـــر للابتكــــار 
-          هاكاثون الابتكار فرصة للعمل ضمن فرق تنافسية على تطوير حلول مبتكرة تسهم في تعزيز الاستدامة وجودة الحيـاة 
-          في جامعة دار الحكمة. انضم إلى هاكاثون الابتكار واكتشف قدراتك في الابتكار والتطوير.
-        </p>
-        <p>
-          دار الحكمة تستضيف جائزة مايدة محي الدين ناظر للابتكار 3، حيث يلتقي الطلاب المبدعون من مختلف الجامعات 
-          للمشاركة في تحدي الابتكار وتطوير حلول مستدامة تخدم المجتمع وتحسن جودة الحياة.
-        </p>
-      </div>
-      {/* Countdown overlay at top center */}
-      <div
-        style={{
-          position: "absolute",
-          top: countdownTopPosition,
-          left: 0,
-          width: "100%",
-          display: "flex",
-          justifyContent: "center",
-          zIndex: 10,
-          pointerEvents: "none", // allow interaction with background
-        }}
-      >
-        <div style={{ pointerEvents: "auto" }}>
-          <CountdownTimer />
+      // Redirect based on user role
+      if (user.role === 'participant') {
+        router.push('/participant-dashboard');
+      } else if (user.role === 'mentor') {
+        router.push('/mentor-dashboard');
+      } else if (user.role === 'admin') {
+        router.push('/admin-hackton-dashboard');
+      }
+    }
+  }, [user, authLoading, router])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+
+    try {
+      const success = await login(formData.email, formData.password)
+
+      if (success) {
+        showAdminToast({
+          title: "نجح",
+          description: "تم تسجيل الدخول بنجاح!",
+        });
+        
+        // The auth context will update the user state
+        // The useEffect above will handle the redirect based on user role
+      } else {
+        showAdminToast({
+          title: "خطأ",
+          description: "بيانات الدخول غير صحيحة",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Login error:', error)
+      showAdminToast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء تسجيل الدخول",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">جاري التحقق من حالة تسجيل الدخول...</p>
         </div>
       </div>
-      {/* Clickable transparent box over yellow box */}
-      <div
-        onClick={handleYellowBoxClick}
-        style={{
-          position: "absolute",
-          top: topPosition,
-          right: "1%",
-          width: "500px",
-          height: boxHeight,
-          zIndex: 5,
-          cursor: "pointer",
-          backgroundColor: "transparent",
-        }}
-        aria-label="Navigate to register team page"
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleYellowBoxClick();
-          }
-        }}
-      />
-      {/* Responsive background image */}
-      <picture>
-        <source media="(max-width: 520px)" srcSet="/mobtop011.png" />
-        <img
-          src="/dhnew001.png"
-          alt="جائزة مايدة محي الدين ناظر للابتكار 3 - هاكاثون الابتكار في جامعة دار الحكمة"
-          style={{
-            width: "100%",
-            maxWidth: "none",
-            height: "auto",
-            display: "block",
-          }}
-        />
-      </picture>
-      {/* Mobile-only Masar Section */}
-      <MasarMobileSection />
-      {/* Mobile-only Bottom Image */}
-      <div className="mobile-bottom-image">
-        <img 
-          src="/mobbot05.png" 
-          alt="Mobile Bottom" 
-          className="w-full h-auto"
-          style={{ display: "block" }}
-        />
+    );
+  }
+
+  // Don't show login form if user is already logged in (will redirect)
+  if (user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">جاري إعادة التوجيه...</p>
+        </div>
       </div>
-      {/* Image Carousel below the background */}
-      <ImageCarousel />
-      {/* FAQ Section below the carousel */}
-      <FAQSection />
-      
-      {/* Footer Image */}
-      <div className="w-full">
-        <picture>
-          <source media="(max-width: 520px)" srcSet="/mobfot.png" />
-          <img 
-            src="/footer.png" 
-            alt="Footer" 
-            className="w-full h-auto"
-            style={{ display: "block" }}
-          />
-        </picture>
-      </div>
-      </div>
-    </>
-  );
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <Card className="w-full max-w-md">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold text-center">
+            تسجيل الدخول
+          </CardTitle>
+          <CardDescription className="text-center">
+            أدخل بريدك الإلكتروني وكلمة المرور للوصول إلى لوحة التحكم
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">البريد الإلكتروني</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="example@email.com"
+                required
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                dir="ltr"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">كلمة المرور</Label>
+              <Input
+                id="password"
+                type="password"
+                placeholder="********"
+                required
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                dir="ltr"
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'جاري تسجيل الدخول...' : 'تسجيل الدخول'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }
