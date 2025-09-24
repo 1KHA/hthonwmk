@@ -1,14 +1,15 @@
-// This is your Prisma schema file,
+// This is your Prisma schema file for production,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
 }
 
-// Database configuration
+// Database configuration for PostgreSQL (production)
 datasource db {
-  provider  = "sqlite"
+  provider  = "postgresql"
   url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Team {

@@ -9,7 +9,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://dar-alhekma.dyam.dev'),
-  title: "جائزة مايدة محي الدين ناظر للابتكار 3",
+  title: "حجاثون",
   description: "تحدي يجمع طلبة الجامعات لاستكشاف وتوظيف الابتكارات الجامعية، توفر جائزة مايـدة محي الديـــن ناظـــر للابتكــــار هاكاثون الابتكار فرصة للعمل ضمن فرق تنافسية على تطوير حلول مبتكرة تسهم في تعزيز الاستدامة وجودة الحيـاة في جامعة دار الحكمة",
   keywords: [
     "جائزة مايدة محي الدين ناظر للابتكار 3",
@@ -38,10 +38,10 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "جائزة مايدة محي الدين ناظر للابتكار 3",
+    title: "حجاثون",
     description: "هاكاثون الابتكار في جامعة دار الحكمة: تحدي يجمع طلبة الجامعات لاستكشاف وتوظيف الابتكارات الجامعية وتطوير حلول مبتكرة تسهم في تعزيز الاستدامة وجودة الحياة",
     url: "https://dar-alhekma.dyam.dev/",
-    siteName: "جائزة مايدة محي الدين ناظر للابتكار 3",
+    siteName: "حجاثون",
     images: [
       {
         url: "/main.png",
@@ -55,13 +55,10 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "جائزة مايدة محي الدين ناظر للابتكار 3",
+    title: "حجاثون",
     description: "هاكاثون الابتكار في جامعة دار الحكمة",
     images: ["/main.png"],
     creator: "@DAHUniversity"
-  },
-  icons: {
-    icon: "/favicon.ico",
   },
   alternates: {
     canonical: "https://dar-alhekma.dyam.dev/",
