@@ -59,6 +59,9 @@ export async function GET(request: NextRequest) {
               contains: email.toLowerCase()
             },
             teamId: null // Only include participants without a team
+          },
+          orderBy: {
+            createdAt: 'desc' // Sort by creation date, newest first
           }
         });
       } else {
@@ -67,6 +70,9 @@ export async function GET(request: NextRequest) {
         participants = await prisma.participant.findMany({
           where: {
             teamId: null // Only include participants without a team
+          },
+          orderBy: {
+            createdAt: 'desc' // Sort by creation date, newest first
           }
         });
       }
