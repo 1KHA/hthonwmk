@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Search, Download, Trash, Edit, Eye, Check, X } from "lucide-react";
+import { Search, Download, Trash, Edit, Eye, Check, X, UserPlus } from "lucide-react";
 import * as XLSX from 'xlsx';
 import {
   Dialog,
@@ -14,6 +14,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useToast } from "../../../../components/ui/use-toast";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 
 // Define types for our data
 interface IndividualParticipant {
@@ -59,6 +62,22 @@ export default function ParticipantsPage() {
   const [selectedParticipant, setSelectedParticipant] = useState<IndividualParticipant | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  
+  // State for new participant form
+  const [newParticipant, setNewParticipant] = useState({
+    fullName: '',
+    email: '',
+    contactNumber: '',
+    gender: '',
+    isUniversityStudent: false,
+    university: '',
+    universityMajor: '',
+    professionalField: '',
+    city: '',
+    canAttendHackathon: false
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const fetchIndividualParticipants = async () => {
     try {
@@ -185,6 +204,74 @@ export default function ParticipantsPage() {
     }
   };
 
+  // Handle creating a new participant
+  const handleCreateParticipant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validate required fields
+    if (!newParticipant.email || !newParticipant.fullName) {
+      toast({
+        title: "خطأ",
+        description: "يرجى ملء الحقول المطلوبة (الاسم والبريد الإلكتروني)",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      const response = await fetch('/api/admin/create-participant', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify(newParticipant),
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        toast({
+          title: "نجح",
+          description: "تم إنشاء المشارك بنجاح",
+        });
+        
+        // Reset form and close modal
+        setNewParticipant({
+          fullName: '',
+          email: '',
+          contactNumber: '',
+          gender: '',
+          isUniversityStudent: false,
+          university: '',
+          universityMajor: '',
+          professionalField: '',
+          city: '',
+          canAttendHackathon: false
+        });
+        
+        setIsCreateModalOpen(false);
+        fetchIndividualParticipants(); // Refresh the list
+      } else {
+        toast({
+          title: "خطأ",
+          description: data.error || "فشل في إنشاء المشارك",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "خطأ",
+        description: "حدث خطأ أثناء إنشاء المشارك",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Filter participants based on search query and selected status
   const filteredParticipants = individualParticipants
     .filter(participant => selectedStatus === "all" || participant.status === selectedStatus)
@@ -263,6 +350,10 @@ export default function ParticipantsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">المشاركون الأفراد</h1>
+        <Button onClick={() => setIsCreateModalOpen(true)}>
+          <UserPlus className="ml-2 h-4 w-4" />
+          إضافة مشارك جديد
+        </Button>
       </div>
 
       <Card>
@@ -467,6 +558,155 @@ export default function ParticipantsPage() {
             <Button variant="outline" onClick={() => setIsDeleteModalOpen(false)}>إلغاء</Button>
             <Button variant="destructive" onClick={() => selectedParticipant && handleDeleteParticipant(selectedParticipant.id)}>حذف</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create New Participant Modal */}
+      <Dialog open={isCreateModalOpen} onOpenChange={setIsCreateModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>إضافة مشارك جديد</DialogTitle>
+            <DialogDescription>
+              أدخل بيانات المشارك الجديد. سيتم إنشاء المشارك بحالة "قيد المراجعة" وسيحتاج للموافقة.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateParticipant} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Full Name */}
+              <div className="space-y-2">
+                <Label htmlFor="fullName">الاسم الكامل <span className="text-red-500">*</span></Label>
+                <Input
+                  id="fullName"
+                  value={newParticipant.fullName}
+                  onChange={(e) => setNewParticipant({...newParticipant, fullName: e.target.value})}
+                  placeholder="الاسم الكامل"
+                  required
+                  className="text-right"
+                />
+              </div>
+
+              {/* Email */}
+              <div className="space-y-2">
+                <Label htmlFor="email">البريد الإلكتروني <span className="text-red-500">*</span></Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={newParticipant.email}
+                  onChange={(e) => setNewParticipant({...newParticipant, email: e.target.value})}
+                  placeholder="example@example.com"
+                  required
+                  className="text-right"
+                />
+              </div>
+
+              {/* Contact Number */}
+              <div className="space-y-2">
+                <Label htmlFor="contactNumber">رقم التواصل</Label>
+                <Input
+                  id="contactNumber"
+                  value={newParticipant.contactNumber}
+                  onChange={(e) => setNewParticipant({...newParticipant, contactNumber: e.target.value})}
+                  placeholder="05xxxxxxxx"
+                  className="text-right"
+                />
+              </div>
+
+              {/* Gender */}
+              <div className="space-y-2">
+                <Label htmlFor="gender">الجنس</Label>
+                <select
+                  id="gender"
+                  value={newParticipant.gender}
+                  onChange={(e) => setNewParticipant({...newParticipant, gender: e.target.value})}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-right"
+                >
+                  <option value="">اختر الجنس</option>
+                  <option value="ذكر">ذكر</option>
+                  <option value="أنثى">أنثى</option>
+                </select>
+              </div>
+
+              {/* University */}
+              <div className="space-y-2">
+                <Label htmlFor="university">الجامعة</Label>
+                <Input
+                  id="university"
+                  value={newParticipant.university}
+                  onChange={(e) => setNewParticipant({...newParticipant, university: e.target.value})}
+                  placeholder="اسم الجامعة"
+                  className="text-right"
+                />
+              </div>
+
+              {/* University Major */}
+              <div className="space-y-2">
+                <Label htmlFor="universityMajor">التخصص الجامعي</Label>
+                <Input
+                  id="universityMajor"
+                  value={newParticipant.universityMajor}
+                  onChange={(e) => setNewParticipant({...newParticipant, universityMajor: e.target.value})}
+                  placeholder="التخصص"
+                  className="text-right"
+                />
+              </div>
+
+              {/* Professional Field */}
+              <div className="space-y-2">
+                <Label htmlFor="professionalField">المجال المهني</Label>
+                <Input
+                  id="professionalField"
+                  value={newParticipant.professionalField}
+                  onChange={(e) => setNewParticipant({...newParticipant, professionalField: e.target.value})}
+                  placeholder="المجال المهني"
+                  className="text-right"
+                />
+              </div>
+
+              {/* City */}
+              <div className="space-y-2">
+                <Label htmlFor="city">المدينة</Label>
+                <Input
+                  id="city"
+                  value={newParticipant.city}
+                  onChange={(e) => setNewParticipant({...newParticipant, city: e.target.value})}
+                  placeholder="المدينة"
+                  className="text-right"
+                />
+              </div>
+            </div>
+
+            {/* Checkboxes */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="isUniversityStudent"
+                  checked={newParticipant.isUniversityStudent}
+                  onCheckedChange={(checked: boolean | 'indeterminate') => 
+                    setNewParticipant({...newParticipant, isUniversityStudent: checked === true})
+                  }
+                />
+                <Label htmlFor="isUniversityStudent">طالب جامعي</Label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="canAttendHackathon"
+                  checked={newParticipant.canAttendHackathon}
+                  onCheckedChange={(checked: boolean | 'indeterminate') => 
+                    setNewParticipant({...newParticipant, canAttendHackathon: checked === true})
+                  }
+                />
+                <Label htmlFor="canAttendHackathon">يمكنه الحضور للهاكاثون</Label>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setIsCreateModalOpen(false)}>إلغاء</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'جاري الإنشاء...' : 'إنشاء المشارك'}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
