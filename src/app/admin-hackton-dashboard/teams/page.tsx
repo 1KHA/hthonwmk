@@ -113,9 +113,13 @@ export default function TeamsPage() {
     fetchTeams();
   }, []);
 
-  const fetchTeams = async () => {
+  const fetchTeams = async (search?: string) => {
     try {
-      const response = await fetch('/api/admin/teams');
+      const url = search 
+        ? `/api/admin/teams?search=${encodeURIComponent(search)}` 
+        : '/api/admin/teams';
+      
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
         // Add computed fullName to each participant
@@ -546,14 +550,8 @@ export default function TeamsPage() {
     setIsFilterModalOpen(false);
   };
 
-  // Filter teams based on search query and all filters
+  // Filter teams based on filters (search is now handled by the API)
   const filteredTeams = teams.filter((team) => {
-    const leader = team.participants.find(p => p.isLeader);
-    const matchesSearch =
-      (team.teamName?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      (team.ideaName?.toLowerCase() || '').includes(searchQuery.toLowerCase()) ||
-      (leader && leader.fullName && leader.fullName.toLowerCase().includes(searchQuery.toLowerCase()));
-
     // Basic status filter (dropdown)
     const matchesBasicFilter =
       selectedFilter === "all" ||
@@ -573,7 +571,7 @@ export default function TeamsPage() {
       (teamTypeFilter === "team" && team.participants.length > 1) ||
       (teamTypeFilter === "individual" && team.participants.length === 1);
 
-    return matchesSearch && matchesBasicFilter && matchesStatusFilter && 
+    return matchesBasicFilter && matchesStatusFilter && 
            matchesTrackFilter && matchesTeamTypeFilter;
   });
 
@@ -607,11 +605,24 @@ export default function TeamsPage() {
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <input
                 type="text"
-                placeholder="البحث عن الفرق..."
+                placeholder="البحث عن الفرق، الأعضاء، البريد الإلكتروني..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    fetchTeams(searchQuery);
+                  }
+                }}
                 className="w-full md:w-64 py-2 pr-10 pl-4 rounded-md border border-input bg-background"
               />
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="absolute left-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
+                onClick={() => fetchTeams(searchQuery)}
+              >
+                <Search className="h-4 w-4" />
+              </Button>
             </div>
             <div className="flex gap-2">
               <select

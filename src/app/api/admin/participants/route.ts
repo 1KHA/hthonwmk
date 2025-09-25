@@ -51,13 +51,31 @@ export async function GET(request: NextRequest) {
     
     try {
       if (email) {
-        console.log("🔍 Finding individual participants by email:", email);
-        // Find individual participants by email (case insensitive)
+        console.log("🔍 Finding individual participants by search term:", email);
+        // Enhanced search across multiple fields (case insensitive)
         participants = await prisma.participant.findMany({
           where: {
-            email: {
-              contains: email.toLowerCase()
-            },
+            OR: [
+              // Search by email
+              { email: { contains: email.toLowerCase() } },
+              // Search by fullName
+              { fullName: { contains: email } },
+              // Search by legacy name fields
+              { firstName: { contains: email } },
+              { secondName: { contains: email } },
+              { familyName: { contains: email } },
+              // Search by contact number
+              { contactNumber: { contains: email } },
+              { phoneNumber: { contains: email } },
+              // Search by university
+              { university: { contains: email } },
+              // Search by major
+              { universityMajor: { contains: email } },
+              { major: { contains: email } },
+              // Search by city
+              { city: { contains: email } },
+              { residence: { contains: email } },
+            ],
             teamId: null // Only include participants without a team
           },
           orderBy: {

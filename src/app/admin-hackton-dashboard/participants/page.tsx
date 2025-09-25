@@ -79,10 +79,14 @@ export default function ParticipantsPage() {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fetchIndividualParticipants = async () => {
+  const fetchIndividualParticipants = async (search?: string) => {
     try {
       setLoading(true);
-      const response = await fetch('/api/admin/participants', {
+      const url = search 
+        ? `/api/admin/participants?email=${encodeURIComponent(search)}` 
+        : '/api/admin/participants';
+      
+      const response = await fetch(url, {
         credentials: 'include',
       });
       if (!response.ok) {
@@ -366,11 +370,24 @@ export default function ParticipantsPage() {
               <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <input
                 type="text"
-                placeholder="بحث عن مشارك..."
+                placeholder="بحث عن مشارك، بريد إلكتروني، جامعة..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    fetchIndividualParticipants(searchQuery);
+                  }
+                }}
                 className="w-full md:w-64 py-2 pr-10 pl-4 rounded-md border border-input bg-background text-right"
               />
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="absolute left-1 top-1/2 transform -translate-y-1/2 h-7 w-7 p-0"
+                onClick={() => fetchIndividualParticipants(searchQuery)}
+              >
+                <Search className="h-4 w-4" />
+              </Button>
             </div>
             <div className="flex gap-2">
               <select
