@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
+import bcrypt from 'bcryptjs';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
 
@@ -53,13 +54,25 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'This email is already registered.' }, { status: 409 });
     }
 
+    // Generate password for the new member using email prefix + "123"
+    const emailPrefix = newMemberData.email.split('@')[0];
+    const password = `${emailPrefix}123`;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    console.log(`🔐 Generating password for new team member ${newMemberData.email}:`);
+    console.log(`   - Email prefix: "${emailPrefix}"`);
+    console.log(`   - Password: "${password}"`);
+
     const newParticipant = await prisma.participant.create({
       data: {
         ...newMemberData,
         isLeader: false, // New members are never leaders
         teamId: teamId,
+        passwordHash: hashedPassword, // Add password hash for the new member
       },
     });
+    
+    console.log(`✅ Password created for new team member ${newMemberData.email}`);
 
     return NextResponse.json(newParticipant, { status: 201 });
 
