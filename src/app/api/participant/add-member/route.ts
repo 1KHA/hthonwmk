@@ -44,6 +44,17 @@ export async function POST(request: NextRequest) {
     if (!newMemberData.email || !newMemberData.firstName || !newMemberData.nationalId) {
         return NextResponse.json({ error: 'Required fields are missing.' }, { status: 400 });
     }
+    
+    // Check current team size (limit to 5 members including leader)
+    const currentTeamMembers = await prisma.participant.count({
+      where: { teamId: teamId }
+    });
+    
+    if (currentTeamMembers >= 5) {
+      return NextResponse.json({ 
+        error: 'Team member limit reached. Teams can have a maximum of 5 members (including the leader).' 
+      }, { status: 400 });
+    }
 
     // Check if email already exists
     const existingParticipant = await prisma.participant.findUnique({
