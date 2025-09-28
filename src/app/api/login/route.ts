@@ -76,7 +76,8 @@ export async function POST(request: NextRequest) {
       // Generate JWT token for participant (30 minutes expiration)
       const token = jwt.sign(
         {
-          participantId: participant.id,
+          id: participant.id,  // Primary identifier for consistency
+          participantId: participant.id,  // Keep for backward compatibility
           email: participant.email,
           role: 'participant',
           teamId: participant.teamId || null,
@@ -154,7 +155,8 @@ export async function POST(request: NextRequest) {
     // Generate JWT token for mentor
     const token = jwt.sign(
       {
-        mentorId: mentor.id,
+        id: mentor.id,  // Primary identifier for consistency
+        mentorId: mentor.id,  // Keep for backward compatibility
         email: mentor.email,
         role: 'mentor',
       },
