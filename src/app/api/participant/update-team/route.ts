@@ -62,7 +62,8 @@ export async function POST(req: NextRequest) {
       hearAboutUs,
       hasParticipated,
       participationDetails,
-      attachmentsLink
+      attachmentsLink,
+      hackathonTrack
     } = await req.json();
 
     // Build the data to update for the team
@@ -85,6 +86,7 @@ export async function POST(req: NextRequest) {
     if (hasParticipated !== undefined) dataToUpdate.hasParticipated = hasParticipated;
     if (participationDetails !== undefined) dataToUpdate.participationDetails = participationDetails;
     if (attachmentsLink !== undefined) dataToUpdate.attachmentsLink = attachmentsLink;
+    if (hackathonTrack !== undefined) dataToUpdate.hackathonTrack = hackathonTrack;
 
     // Update the team
     const updatedTeam = await prisma.team.update({

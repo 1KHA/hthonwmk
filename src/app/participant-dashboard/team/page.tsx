@@ -50,6 +50,7 @@ interface TeamData {
   ideaName: string;
   status: string;
   challenge: string;
+  hackathonTrack?: string;
   ideaDescription: string;
   challengeReason: string;
   ideaSolution: string;
@@ -93,8 +94,16 @@ export default function TeamManagementPage() {
   const [isTeamEditModalOpen, setIsTeamEditModalOpen] = useState(false);
   const [editedParticipant, setEditedParticipant] = useState<Participant | null>(null);
   const [newParticipant, setNewParticipant] = useState(initialParticipantState);
-  const [editedTeam, setEditedTeam] = useState<Partial<TeamData> | null>(null);
+  const [editedTeam, setEditedTeam] = useState<Partial<TeamData> & { hackathonTrack?: string } | null>(null);
   const { checkAndHandleAuthError } = useAuthErrorHandler();
+  
+  // Static list of Arabic tracks
+  const ARABIC_TRACKS = [
+    "تحديات البنية التحتية الذكية",
+    "تحديات بيئية",
+    "تحديات إدارة الحشود",
+    "تحديات صحية",
+  ];
 
   const fetchTeamDetails = async () => {
     try {
@@ -271,6 +280,7 @@ export default function TeamManagementPage() {
                     teamName: teamData.teamName,
                     ideaName: teamData.ideaName,
                     challenge: teamData.challenge,
+                    hackathonTrack: teamData.hackathonTrack || teamData.challenge,
                     ideaDescription: teamData.ideaDescription,
                     challengeReason: teamData.challengeReason,
                     ideaSolution: teamData.ideaSolution,
@@ -303,8 +313,8 @@ export default function TeamManagementPage() {
                         <p className="font-medium">{teamData.ideaName}</p>
                     </div>
                     <div className="space-y-2">
-                        <Label>التحدي</Label>
-                        <p className="font-medium">{teamData.challenge}</p>
+                        <Label>التحدي (المسار)</Label>
+                        <p className="font-medium">{teamData.hackathonTrack || teamData.challenge}</p>
                     </div>
                     <div className="space-y-2">
                         <Label>مرحلة الفكرة</Label>
@@ -654,13 +664,20 @@ export default function TeamManagementPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="challenge">التحدي</Label>
-                    <Input 
-                      id="challenge" 
-                      value={editedTeam.challenge || ''} 
-                      onChange={(e) => setEditedTeam({ ...editedTeam, challenge: e.target.value })}
-                      className="w-full"
-                    />
+                    <Label htmlFor="challenge">التحدي (المسار)</Label>
+                    <Select 
+                      value={editedTeam.hackathonTrack || ''} 
+                      onValueChange={(value) => setEditedTeam({ ...editedTeam, hackathonTrack: value, challenge: value })}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="اختر المسار" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ARABIC_TRACKS.map((track) => (
+                          <SelectItem key={track} value={track}>{track}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
