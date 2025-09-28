@@ -192,7 +192,7 @@ export default function ParticipantMilestonesPage() {
     return interval;
   };
 
-  // Submit a milestone
+  // Submit a milestone using direct upload to Supabase
   const submitMilestone = async () => {
     if (!selectedMilestone || !selectedFile) {
       setSubmissionStatus({
@@ -217,21 +217,60 @@ export default function ParticipantMilestonesPage() {
     const progressInterval = simulateProgress();
 
     try {
-      const formData = new FormData();
-      formData.append("milestoneId", selectedMilestone.id);
-      formData.append("file", selectedFile);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 290000); // 4 minutes 50 seconds timeout
-
-      const response = await fetch("/api/participant/submit-milestone", {
+      // Step 1: Get a signed URL for direct upload
+      const getSignedUrlResponse = await fetch("/api/participant/get-signed-url", {
         method: "POST",
-        body: formData,
-        signal: controller.signal
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          milestoneId: selectedMilestone.id,
+          fileName: selectedFile.name,
+          fileType: selectedFile.type
+        })
       });
 
-      clearTimeout(timeoutId);
+      if (!getSignedUrlResponse.ok) {
+        const errorData = await getSignedUrlResponse.json();
+        throw new Error(errorData.error || "حدث خطأ أثناء الحصول على رابط الرفع");
+      }
+
+      const signedUrlData = await getSignedUrlResponse.json();
       
+      if (!signedUrlData.success || !signedUrlData.signedUrl) {
+        throw new Error("فشل الحصول على رابط الرفع");
+      }
+
+      // Step 2: Upload the file directly to Supabase using the signed URL
+      const uploadResponse = await fetch(signedUrlData.signedUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": selectedFile.type || "application/octet-stream",
+        },
+        body: selectedFile
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error("فشل رفع الملف إلى الخادم");
+      }
+
+      // Update progress to 80% after successful upload
+      setUploadProgress(80);
+
+      // Step 3: Record the submission in our database
+      const recordSubmissionResponse = await fetch("/api/participant/record-submission", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          milestoneId: selectedMilestone.id,
+          filePath: signedUrlData.path,
+          fileName: selectedFile.name,
+          publicUrl: signedUrlData.publicUrl
+        })
+      });
+
       // Complete the progress bar
       clearInterval(progressInterval);
       setUploadProgress(100);
@@ -239,12 +278,12 @@ export default function ParticipantMilestonesPage() {
       // Delay to show 100% completion
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "حدث خطأ أثناء تسليم المشروع");
+      if (!recordSubmissionResponse.ok) {
+        const errorData = await recordSubmissionResponse.json();
+        throw new Error(errorData.error || "حدث خطأ أثناء تسجيل التسليم");
       }
 
-      const result = await response.json();
+      const result = await recordSubmissionResponse.json();
 
       if (result.success) {
         setSubmissionStatus({
@@ -278,34 +317,26 @@ export default function ParticipantMilestonesPage() {
       // Clear progress interval
       clearInterval(progressInterval);
       
-      // Check if it's an abort error (timeout)
-      if (err instanceof DOMException && err.name === "AbortError") {
+      // Handle errors and implement retry logic
+      if (retryCount < maxRetries) {
         setSubmissionStatus({
           success: false,
-          message: "انتهت مهلة الاتصال. قد يكون حجم الملف كبيرًا جدًا أو اتصال الإنترنت بطيء."
+          message: `حدث خطأ أثناء الاتصال بالخادم. جاري إعادة المحاولة (${retryCount + 1}/${maxRetries})...`
         });
+        
+        // Increment retry count
+        setRetryCount(prev => prev + 1);
+        
+        // Retry after a delay
+        setTimeout(() => {
+          submitMilestone();
+        }, 2000);
       } else {
-        // Handle other errors and implement retry logic
-        if (retryCount < maxRetries) {
-          setSubmissionStatus({
-            success: false,
-            message: `حدث خطأ أثناء الاتصال بالخادم. جاري إعادة المحاولة (${retryCount + 1}/${maxRetries})...`
-          });
-          
-          // Increment retry count
-          setRetryCount(prev => prev + 1);
-          
-          // Retry after a delay
-          setTimeout(() => {
-            submitMilestone();
-          }, 2000);
-        } else {
-          setSubmissionStatus({
-            success: false,
-            message: "فشلت عملية التسليم بعد عدة محاولات. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى."
-          });
-          setShowProgress(false);
-        }
+        setSubmissionStatus({
+          success: false,
+          message: "فشلت عملية التسليم بعد عدة محاولات. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى."
+        });
+        setShowProgress(false);
       }
     } finally {
       if (retryCount >= maxRetries) {
