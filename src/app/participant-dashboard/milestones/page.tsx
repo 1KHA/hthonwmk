@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, FileText, CheckCircle, AlertCircle, Loader2, Upload, X, RefreshCw, Info, ExternalLink } from "lucide-react";
+import { Clock, FileText, CheckCircle, AlertCircle, Loader2, Upload, X, RefreshCw, Info } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import Link from "next/link";
@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
+import { MAX_FILE_SIZE, MAX_FILE_SIZE_MB, ALLOWED_FILE_TYPES } from '@/lib/constants';
 
 // Define the Milestone type
 type Milestone = {
@@ -35,26 +36,6 @@ type SubmissionResponse = {
   submission?: any;
 };
 
-// Maximum file size in bytes (25MB)
-const MAX_FILE_SIZE = 25 * 1024 * 1024;
-const MAX_FILE_SIZE_MB = 25;
-
-// Small file size limit for direct upload (4MB)
-const SMALL_FILE_SIZE_LIMIT = 4 * 1024 * 1024;
-const SMALL_FILE_SIZE_LIMIT_MB = 4;
-
-// Allowed file types
-const ALLOWED_FILE_TYPES = [
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/zip",
-  "application/x-zip-compressed",
-  "application/vnd.rar",
-  "image/jpeg",
-  "image/png",
-];
-
 export default function ParticipantMilestonesPage() {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,7 +50,6 @@ export default function ParticipantMilestonesPage() {
   const [showProgress, setShowProgress] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [isLargeFile, setIsLargeFile] = useState(false);
   const maxRetries = 3;
 
   // Fetch milestones from API
@@ -154,7 +134,6 @@ export default function ParticipantMilestonesPage() {
     setUploadProgress(0);
     setShowProgress(false);
     setRetryCount(0);
-    setIsLargeFile(false);
     setIsDialogOpen(true);
   };
 
@@ -189,13 +168,9 @@ export default function ParticipantMilestonesPage() {
       if (error) {
         setFileError(error);
         setSelectedFile(null);
-        setIsLargeFile(false);
       } else {
         setSelectedFile(file);
         setFileError(null);
-        
-        // Check if it's a large file
-        setIsLargeFile(file.size > SMALL_FILE_SIZE_LIMIT);
       }
     }
   };
@@ -242,78 +217,60 @@ export default function ParticipantMilestonesPage() {
     const progressInterval = simulateProgress();
 
     try {
-      // For small files, use the direct upload endpoint
-      if (selectedFile.size <= SMALL_FILE_SIZE_LIMIT) {
-        const formData = new FormData();
-        formData.append("milestoneId", selectedMilestone.id);
-        formData.append("file", selectedFile);
+      const formData = new FormData();
+      formData.append("milestoneId", selectedMilestone.id);
+      formData.append("file", selectedFile);
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 290000); // 4 minutes 50 seconds timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 290000); // 4 minutes 50 seconds timeout
 
-        const response = await fetch("/api/participant/submit-small-file", {
-          method: "POST",
-          body: formData,
-          signal: controller.signal
+      const response = await fetch("/api/participant/submit-milestone", {
+        method: "POST",
+        body: formData,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+      
+      // Complete the progress bar
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      
+      // Delay to show 100% completion
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "حدث خطأ أثناء تسليم المشروع");
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        setSubmissionStatus({
+          success: true,
+          message: result.message || "تم تسليم المشروع بنجاح"
         });
 
-        clearTimeout(timeoutId);
-        
-        // Complete the progress bar
-        clearInterval(progressInterval);
-        setUploadProgress(100);
-        
-        // Delay to show 100% completion
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Update the milestone status in the UI
+        setMilestones(milestones.map(m => 
+          m.id === selectedMilestone.id 
+            ? { ...m, hasSubmitted: true, submissionCount: m.submissionCount + 1 } 
+            : m
+        ));
 
-        if (!response.ok) {
-          // Check if it's a 413 Content Too Large error
-          if (response.status === 413) {
-            throw new Error("413 Content Too Large");
-          }
-          
-          const errorData = await response.json();
-          throw new Error(errorData.error || "حدث خطأ أثناء تسليم المشروع");
-        }
-
-        const result = await response.json();
-
-        if (result.success) {
-          setSubmissionStatus({
-            success: true,
-            message: result.message || "تم تسليم المشروع بنجاح"
-          });
-
-          // Update the milestone status in the UI
-          setMilestones(milestones.map(m => 
-            m.id === selectedMilestone.id 
-              ? { ...m, hasSubmitted: true, submissionCount: m.submissionCount + 1 } 
-              : m
-          ));
-
-          // Close the dialog after a delay
-          setTimeout(() => {
-            setIsDialogOpen(false);
-            setShowProgress(false);
-          }, 2000);
-        } else {
-          setSubmissionStatus({
-            success: false,
-            message: result.error || "حدث خطأ أثناء تسليم المشروع"
-          });
-          
+        // Close the dialog after a delay
+        setTimeout(() => {
+          setIsDialogOpen(false);
           setShowProgress(false);
-        }
+        }, 2000);
       } else {
-        // For larger files, show a message suggesting to compress the file
-        clearInterval(progressInterval);
-        setUploadProgress(0);
-        setShowProgress(false);
-        
         setSubmissionStatus({
           success: false,
-          message: `حجم الملف (${formatFileSize(selectedFile.size)}) يتجاوز الحد الأقصى المسموح به للرفع المباشر (${SMALL_FILE_SIZE_LIMIT_MB} ميجابايت). يرجى ضغط الملف أو تقسيمه إلى ملفات أصغر.`
+          message: result.error || "حدث خطأ أثناء تسليم المشروع"
         });
+        
+        setShowProgress(false);
       }
     } catch (err) {
       console.error("Error submitting milestone:", err);
@@ -326,11 +283,6 @@ export default function ParticipantMilestonesPage() {
         setSubmissionStatus({
           success: false,
           message: "انتهت مهلة الاتصال. قد يكون حجم الملف كبيرًا جدًا أو اتصال الإنترنت بطيء."
-        });
-      } else if (err instanceof Error && err.message === "413 Content Too Large") {
-        setSubmissionStatus({
-          success: false,
-          message: "حجم الملف كبير جدًا. يرجى ضغط الملف أو تقسيمه إلى ملفات أصغر."
         });
       } else {
         // Handle other errors and implement retry logic
@@ -474,10 +426,7 @@ export default function ParticipantMilestonesPage() {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                الملفات المدعومة: PDF, Word, ZIP, RAR, JPEG, PNG (الحد الأقصى: 25 ميجابايت)
-              </p>
-              <p className="text-xs text-amber-600">
-                ملاحظة: الملفات التي يزيد حجمها عن {SMALL_FILE_SIZE_LIMIT_MB} ميجابايت قد تواجه مشاكل في الرفع. يرجى ضغط الملفات الكبيرة.
+                الملفات المدعومة: PDF, Word, ZIP, RAR, JPEG, PNG (الحد الأقصى: {MAX_FILE_SIZE_MB} ميجابايت)
               </p>
             </div>
 
@@ -506,15 +455,6 @@ export default function ParticipantMilestonesPage() {
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
-                
-                {isLargeFile && (
-                  <div className="flex items-center gap-2 p-2 bg-amber-50 rounded-md">
-                    <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
-                    <p className="text-xs text-amber-600">
-                      هذا ملف كبير ({formatFileSize(selectedFile.size)}). قد تواجه مشاكل في الرفع. يرجى ضغط الملف أو تقسيمه إلى ملفات أصغر.
-                    </p>
-                  </div>
-                )}
                 
                 <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-md">
                   <Info className="h-4 w-4 text-blue-600 flex-shrink-0" />

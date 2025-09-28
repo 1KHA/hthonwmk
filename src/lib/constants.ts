@@ -2,10 +2,6 @@
 export const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB in bytes
 export const MAX_FILE_SIZE_MB = 25; // 25MB for display purposes
 
-// Small file size limit for direct upload (to stay under Vercel's payload limit)
-export const SMALL_FILE_SIZE_LIMIT = 4 * 1024 * 1024; // 4MB in bytes
-export const SMALL_FILE_SIZE_LIMIT_MB = 4; // 4MB for display purposes
-
 // Allowed file types for milestone submissions
 export const ALLOWED_FILE_TYPES = [
   "application/pdf",
@@ -17,3 +13,6 @@ export const ALLOWED_FILE_TYPES = [
   "image/jpeg",
   "image/png",
 ];
+
+// Supabase Storage bucket name
+export const STORAGE_BUCKET_NAME = 'newbuk';
