@@ -41,22 +41,22 @@ export async function GET(request: NextRequest) {
     // Get join requests for the team using raw SQL
     const joinRequests = await prisma.$queryRaw`
       SELECT 
-        tjr.id,
-        tjr.status,
-        tjr.message,
+        tjr."id",
+        tjr."status",
+        tjr."message",
         tjr."createdAt",
         tjr."updatedAt",
-        p.id as "participantId",
+        p."id" as "participantId",
         p."fullName",
         p."firstName",
         p."secondName",
         p."familyName",
-        p.email,
-        p.university,
+        p."email",
+        p."university",
         p."professionalField"
       FROM "TeamJoinRequest" tjr
-      JOIN "Participant" p ON tjr."participantId" = p.id
-      WHERE tjr."teamId" = ${currentParticipant.teamId} AND tjr.status = 'pending'
+      JOIN "Participant" p ON tjr."participantId" = p."id"
+      WHERE tjr."teamId" = ${currentParticipant.teamId} AND tjr."status" = 'pending'
       ORDER BY tjr."createdAt" DESC
     ` as any[];
 

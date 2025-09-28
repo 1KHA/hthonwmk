@@ -53,19 +53,19 @@ export async function POST(request: NextRequest) {
     // Get the join request using raw SQL
     const joinRequestResult = await prisma.$queryRaw`
       SELECT 
-        tjr.id,
+        tjr."id",
         tjr."participantId",
         tjr."teamId",
-        tjr.status,
+        tjr."status",
         p."fullName",
         p."firstName",
         p."secondName",
         p."familyName",
         t."teamName"
       FROM "TeamJoinRequest" tjr
-      JOIN "Participant" p ON tjr."participantId" = p.id
-      JOIN "Team" t ON tjr."teamId" = t.id
-      WHERE tjr.id = ${requestId} AND tjr."teamId" = ${currentParticipant.teamId}
+      JOIN "Participant" p ON tjr."participantId" = p."id"
+      JOIN "Team" t ON tjr."teamId" = t."id"
+      WHERE tjr."id" = ${requestId} AND tjr."teamId" = ${currentParticipant.teamId}
     ` as any[];
 
     if (joinRequestResult.length === 0) {
@@ -95,12 +95,12 @@ export async function POST(request: NextRequest) {
       });
 
       if (participantToAdd?.teamId) {
-        // Update request status to rejected since participant already joined another team
-        await prisma.$executeRaw`
-          UPDATE "TeamJoinRequest" 
-          SET status = 'rejected', "updatedAt" = NOW()
-          WHERE id = ${requestId}
-        `;
+      // Update request status to rejected since participant already joined another team
+      await prisma.$executeRaw`
+        UPDATE "TeamJoinRequest" 
+        SET "status" = 'rejected', "updatedAt" = NOW()
+        WHERE "id" = ${requestId}
+      `;
         
         return NextResponse.json({ 
           error: 'المشارك انضم لفريق آخر بالفعل' 
@@ -113,23 +113,23 @@ export async function POST(request: NextRequest) {
         await tx.$executeRaw`
           UPDATE "Participant" 
           SET "teamId" = ${currentParticipant.teamId}, "updatedAt" = NOW()
-          WHERE id = ${joinRequest.participantId}
+          WHERE "id" = ${joinRequest.participantId}
         `;
 
         // Update request status to accepted
         await tx.$executeRaw`
           UPDATE "TeamJoinRequest" 
-          SET status = 'accepted', "updatedAt" = NOW()
-          WHERE id = ${requestId}
+          SET "status" = 'accepted', "updatedAt" = NOW()
+          WHERE "id" = ${requestId}
         `;
 
         // Reject all other pending requests from this participant
         await tx.$executeRaw`
           UPDATE "TeamJoinRequest" 
-          SET status = 'rejected', "updatedAt" = NOW()
+          SET "status" = 'rejected', "updatedAt" = NOW()
           WHERE "participantId" = ${joinRequest.participantId} 
-          AND status = 'pending' 
-          AND id != ${requestId}
+          AND "status" = 'pending' 
+          AND "id" != ${requestId}
         `;
       });
 
@@ -157,8 +157,8 @@ export async function POST(request: NextRequest) {
       // Update request status to rejected
       await prisma.$executeRaw`
         UPDATE "TeamJoinRequest" 
-        SET status = 'rejected', "updatedAt" = NOW()
-        WHERE id = ${requestId}
+        SET "status" = 'rejected', "updatedAt" = NOW()
+        WHERE "id" = ${requestId}
       `;
 
       // Send notification to the rejected participant

@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     // For now, we'll use a direct query since the relation might not be available yet
     const pendingRequestsCount = await prisma.$queryRaw`
       SELECT COUNT(*) as count FROM "TeamJoinRequest" 
-      WHERE "participantId" = ${decoded.participantId} AND status = 'pending'
+      WHERE "participantId" = ${decoded.participantId} AND "status" = 'pending'
     ` as any[];
     
     const pendingCount = parseInt(pendingRequestsCount[0]?.count || '0');
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     // Check if request already exists using raw SQL
     const existingRequestResult = await prisma.$queryRaw`
-      SELECT id FROM "TeamJoinRequest" 
+      SELECT "id" FROM "TeamJoinRequest" 
       WHERE "participantId" = ${decoded.participantId} AND "teamId" = ${teamId}
     ` as any[];
 
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     const joinRequestResult = await prisma.$queryRaw`
       INSERT INTO "TeamJoinRequest" ("id", "participantId", "teamId", "message", "status", "createdAt", "updatedAt")
       VALUES (gen_random_uuid(), ${decoded.participantId}, ${teamId}, ${message || null}, 'pending', NOW(), NOW())
-      RETURNING id
+      RETURNING "id"
     ` as any[];
 
     const joinRequest = { id: joinRequestResult[0]?.id };
@@ -153,16 +153,16 @@ export async function GET(request: NextRequest) {
     // Get participant's sent join requests using raw SQL
     const joinRequests = await prisma.$queryRaw`
       SELECT 
-        tjr.id,
-        tjr.status,
-        tjr.message,
+        tjr."id",
+        tjr."status",
+        tjr."message",
         tjr."createdAt",
         tjr."updatedAt",
-        t.id as "teamId",
+        t."id" as "teamId",
         t."teamName",
         t."ideaDescription"
       FROM "TeamJoinRequest" tjr
-      JOIN "Team" t ON tjr."teamId" = t.id
+      JOIN "Team" t ON tjr."teamId" = t."id"
       WHERE tjr."participantId" = ${decoded.participantId}
       ORDER BY tjr."createdAt" DESC
     ` as any[];

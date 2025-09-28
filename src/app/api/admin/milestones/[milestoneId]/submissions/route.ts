@@ -36,20 +36,20 @@ export async function GET(
     const submissions = await prisma.$queryRaw`
       SELECT 
         ms.id, 
-        ms.participantId, 
-        ms.milestoneId, 
-        ms.filePath, 
-        ms.fileName, 
-        ms.submittedAt, 
-        ms.reviewStatus, 
-        ms.reviewComment, 
-        ms.reviewedAt,
-        p.firstName, 
-        p.secondName, 
-        p.familyName, 
+        ms."participantId", 
+        ms."milestoneId", 
+        ms."filePath", 
+        ms."fileName", 
+        ms."submittedAt", 
+        ms."reviewStatus", 
+        ms."reviewComment", 
+        ms."reviewedAt",
+        p."firstName", 
+        p."secondName", 
+        p."familyName", 
         p.email,
         t.id as teamId, 
-        t.teamName
+        t."teamName"
       FROM "MilestoneSubmission" ms
       JOIN "Participant" p ON ms."participantId" = p.id
       JOIN "Team" t ON p."teamId" = t.id
