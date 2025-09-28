@@ -35,6 +35,32 @@ type SubmissionResponse = {
   submission?: any;
 };
 
+// Define the validation response type
+type ValidationResponse = {
+  success: boolean;
+  validationPassed: boolean;
+  fileName: string;
+  originalFileName: string;
+  milestoneId: string;
+  submissionId: string;
+  participantId: string;
+  teamName: string;
+  maxChunkSize: number;
+  path: string;
+  error?: string;
+};
+
+// Define the chunk upload response type
+type ChunkUploadResponse = {
+  success: boolean;
+  message: string;
+  chunkIndex?: number;
+  totalChunks?: number;
+  isComplete?: boolean;
+  url?: string;
+  error?: string;
+};
+
 // Maximum file size in bytes (25MB)
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const MAX_FILE_SIZE_MB = 25;
@@ -51,6 +77,9 @@ const ALLOWED_FILE_TYPES = [
   "image/png",
 ];
 
+// Default chunk size (4MB)
+const DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;
+
 export default function ParticipantMilestonesPage() {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +94,8 @@ export default function ParticipantMilestonesPage() {
   const [showProgress, setShowProgress] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [currentChunk, setCurrentChunk] = useState(0);
+  const [totalChunks, setTotalChunks] = useState(0);
   const maxRetries = 3;
 
   // Fetch milestones from API
@@ -149,6 +180,8 @@ export default function ParticipantMilestonesPage() {
     setUploadProgress(0);
     setShowProgress(false);
     setRetryCount(0);
+    setCurrentChunk(0);
+    setTotalChunks(0);
     setIsDialogOpen(true);
   };
 
@@ -190,24 +223,21 @@ export default function ParticipantMilestonesPage() {
     }
   };
 
-  // Create a simulated progress updater
-  const simulateProgress = () => {
-    setShowProgress(true);
-    setUploadProgress(0);
+  // Split file into chunks
+  const splitFileIntoChunks = (file: File, chunkSize: number): Blob[] => {
+    const chunks: Blob[] = [];
+    let start = 0;
     
-    const interval = setInterval(() => {
-      setUploadProgress(prev => {
-        // Slow down progress as it gets closer to 90%
-        const increment = prev < 30 ? 5 : prev < 60 ? 3 : prev < 80 ? 1 : 0.5;
-        const newProgress = Math.min(prev + increment, 90);
-        return newProgress;
-      });
-    }, 300);
+    while (start < file.size) {
+      const end = Math.min(start + chunkSize, file.size);
+      chunks.push(file.slice(start, end));
+      start = end;
+    }
     
-    return interval;
+    return chunks;
   };
 
-  // Submit a milestone with retry logic
+  // Submit a milestone with chunked upload
   const submitMilestone = async () => {
     if (!selectedMilestone || !selectedFile) {
       setSubmissionStatus({
@@ -227,82 +257,131 @@ export default function ParticipantMilestonesPage() {
     setIsSubmitting(true);
     setSubmissionStatus(null);
     setFileError(null);
+    setShowProgress(true);
+    setUploadProgress(0);
     
-    // Start progress simulation
-    const progressInterval = simulateProgress();
-
     try {
-      const formData = new FormData();
-      formData.append("milestoneId", selectedMilestone.id);
-      formData.append("file", selectedFile);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 290000); // 4 minutes 50 seconds timeout
-
-      const response = await fetch("/api/participant/submit-milestone", {
-        method: "POST",
-        body: formData,
-        signal: controller.signal
+      // Step 1: Validate the file and get submission details
+      const validationData = {
+        fileName: selectedFile.name,
+        fileType: selectedFile.type,
+        fileSize: selectedFile.size,
+        milestoneId: selectedMilestone.id
+      };
+      
+      console.log("Validating file...");
+      setSubmissionStatus({
+        success: true,
+        message: "جاري التحقق من صحة الملف..."
       });
-
-      clearTimeout(timeoutId);
       
-      // Complete the progress bar
-      clearInterval(progressInterval);
-      setUploadProgress(100);
+      const validationResponse = await fetch("/api/participant/get-upload-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(validationData)
+      });
       
-      // Delay to show 100% completion
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const result: SubmissionResponse = await response.json();
-
-      if (response.ok) {
+      if (!validationResponse.ok) {
+        const errorData = await validationResponse.json();
+        throw new Error(errorData.error || "فشل التحقق من صحة الملف");
+      }
+      
+      const validationResult: ValidationResponse = await validationResponse.json();
+      
+      if (!validationResult.success) {
+        throw new Error(validationResult.error || "فشل التحقق من صحة الملف");
+      }
+      
+      console.log("File validation successful. Preparing for upload...");
+      
+      // Step 2: Split the file into chunks
+      const chunkSize = validationResult.maxChunkSize || DEFAULT_CHUNK_SIZE;
+      const chunks = splitFileIntoChunks(selectedFile, chunkSize);
+      setTotalChunks(chunks.length);
+      
+      console.log(`File split into ${chunks.length} chunks of ${formatFileSize(chunkSize)} each`);
+      setSubmissionStatus({
+        success: true,
+        message: `جاري تحضير الملف للرفع (${chunks.length} أجزاء)...`
+      });
+      
+      // Step 3: Upload each chunk
+      for (let i = 0; i < chunks.length; i++) {
+        setCurrentChunk(i);
+        const progressPercentage = Math.round((i / chunks.length) * 100);
+        setUploadProgress(progressPercentage);
+        
         setSubmissionStatus({
           success: true,
-          message: result.message || "تم تسليم المشروع بنجاح"
+          message: `جاري رفع الجزء ${i + 1} من ${chunks.length}...`
         });
-
-        // Update the milestone status in the UI
-        setMilestones(milestones.map(m => 
-          m.id === selectedMilestone.id 
-            ? { ...m, hasSubmitted: true, submissionCount: m.submissionCount + 1 } 
-            : m
-        ));
-
-        // Close the dialog after a delay
-        setTimeout(() => {
-          setIsDialogOpen(false);
-          setShowProgress(false);
-        }, 2000);
-      } else {
-        // Handle specific error for duplicate submission
-        const errorMessage = result.error || "حدث خطأ أثناء تسليم المشروع";
         
-        // If this is a duplicate submission error, update the UI to reflect that
-        if (errorMessage.includes("لقد قمت بتسليم هذا المشروع بالفعل")) {
-          // Update the milestone status in the UI to prevent further attempts
-          setMilestones(milestones.map(m => 
-            m.id === selectedMilestone.id 
-              ? { ...m, hasSubmitted: true } 
-              : m
-          ));
+        const chunkFormData = new FormData();
+        chunkFormData.append("chunk", chunks[i]);
+        chunkFormData.append("chunkIndex", i.toString());
+        chunkFormData.append("totalChunks", chunks.length.toString());
+        chunkFormData.append("fileName", validationResult.fileName);
+        chunkFormData.append("originalFileName", validationResult.originalFileName);
+        chunkFormData.append("milestoneId", validationResult.milestoneId);
+        chunkFormData.append("submissionId", validationResult.submissionId);
+        chunkFormData.append("path", validationResult.path);
+        
+        console.log(`Uploading chunk ${i + 1}/${chunks.length}`);
+        
+        const chunkResponse = await fetch("/api/participant/upload-chunk", {
+          method: "POST",
+          body: chunkFormData
+        });
+        
+        if (!chunkResponse.ok) {
+          const errorData = await chunkResponse.json();
+          throw new Error(errorData.error || `فشل رفع الجزء ${i + 1}`);
         }
         
-        setSubmissionStatus({
-          success: false,
-          message: errorMessage
-        });
+        const chunkResult: ChunkUploadResponse = await chunkResponse.json();
         
-        setShowProgress(false);
+        if (!chunkResult.success) {
+          throw new Error(chunkResult.error || `فشل رفع الجزء ${i + 1}`);
+        }
+        
+        // If this is the last chunk and upload is complete
+        if (chunkResult.isComplete) {
+          console.log("All chunks uploaded successfully!");
+          setUploadProgress(100);
+          
+          setSubmissionStatus({
+            success: true,
+            message: "تم تسليم المشروع بنجاح"
+          });
+          
+          // Update the milestone status in the UI
+          setMilestones(milestones.map(m => 
+            m.id === selectedMilestone.id 
+              ? { ...m, hasSubmitted: true, submissionCount: m.submissionCount + 1 } 
+              : m
+          ));
+          
+          // Close the dialog after a delay
+          setTimeout(() => {
+            setIsDialogOpen(false);
+            setShowProgress(false);
+          }, 2000);
+          
+          break;
+        }
       }
     } catch (err) {
       console.error("Error submitting milestone:", err);
       
-      // Clear progress interval
-      clearInterval(progressInterval);
-      
-      // Check if it's an abort error (timeout)
-      if (err instanceof DOMException && err.name === "AbortError") {
+      // Check if it's a 413 Content Too Large error
+      if (err instanceof Error && err.message.includes("413")) {
+        setSubmissionStatus({
+          success: false,
+          message: "حجم الملف كبير جدًا. يرجى تقليل حجم الملف والمحاولة مرة أخرى."
+        });
+      } else if (err instanceof DOMException && err.name === "AbortError") {
         setSubmissionStatus({
           success: false,
           message: "انتهت مهلة الاتصال. قد يكون حجم الملف كبيرًا جدًا أو اتصال الإنترنت بطيء."
@@ -327,7 +406,6 @@ export default function ParticipantMilestonesPage() {
             success: false,
             message: "فشلت عملية التسليم بعد عدة محاولات. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى."
           });
-          setShowProgress(false);
         }
       }
     } finally {
@@ -343,6 +421,8 @@ export default function ParticipantMilestonesPage() {
     setUploadProgress(0);
     setShowProgress(false);
     setSubmissionStatus(null);
+    setCurrentChunk(0);
+    setTotalChunks(0);
     submitMilestone();
   };
 
@@ -491,7 +571,11 @@ export default function ParticipantMilestonesPage() {
             {showProgress && (
               <div className="space-y-2">
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>جاري رفع الملف...</span>
+                  <span>
+                    {totalChunks > 0 
+                      ? `جاري رفع الجزء ${currentChunk + 1} من ${totalChunks}` 
+                      : 'جاري رفع الملف...'}
+                  </span>
                   <span>{Math.round(uploadProgress)}%</span>
                 </div>
                 <Progress value={uploadProgress} className="h-2" />
