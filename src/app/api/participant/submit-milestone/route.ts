@@ -17,15 +17,45 @@ interface JwtPayload {
   isLeader?: boolean;
 }
 
+// Error types for better error handling
+enum ErrorType {
+  VALIDATION = 'validation_error',
+  AUTHENTICATION = 'authentication_error',
+  AUTHORIZATION = 'authorization_error',
+  NOT_FOUND = 'not_found_error',
+  DUPLICATE = 'duplicate_error',
+  UPLOAD = 'upload_error',
+  DATABASE = 'database_error',
+  TIMEOUT = 'timeout_error',
+  UNKNOWN = 'unknown_error'
+}
+
+// Helper function to log and return errors
+function handleError(error: any, message: string, status: number, type: ErrorType) {
+  console.error(`[${type}] ${message}:`, error);
+  return NextResponse.json(
+    { 
+      error: message,
+      errorType: type
+    },
+    { status }
+  );
+}
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  let uploadStartTime = 0;
+  let uploadEndTime = 0;
+  
   try {
     // Check if the request is multipart/form-data
     const contentType = request.headers.get("content-type") || "";
     if (!contentType.includes("multipart/form-data")) {
-      return NextResponse.json(
-        { error: "يجب أن يكون الطلب من نوع multipart/form-data" },
-        { status: 400 }
+      return handleError(
+        null,
+        "يجب أن يكون الطلب من نوع multipart/form-data",
+        400,
+        ErrorType.VALIDATION
       );
     }
 
@@ -36,44 +66,57 @@ export async function POST(request: NextRequest) {
 
     // Validate inputs
     if (!milestoneId) {
-      return NextResponse.json(
-        { error: "معرف المرحلة مطلوب" },
-        { status: 400 }
+      return handleError(
+        null,
+        "معرف المرحلة مطلوب",
+        400,
+        ErrorType.VALIDATION
       );
     }
 
     if (!file) {
-      return NextResponse.json(
-        { error: "الملف مطلوب" },
-        { status: 400 }
+      return handleError(
+        null,
+        "الملف مطلوب",
+        400,
+        ErrorType.VALIDATION
       );
     }
 
+    // Log file information for debugging
+    console.log(`File upload attempt: ${file.name}, size: ${(file.size / (1024 * 1024)).toFixed(2)}MB, type: ${file.type}`);
+
     // Validate file size
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: `حجم الملف يجب أن يكون أقل من ${MAX_FILE_SIZE_MB} ميجابايت` },
-        { status: 400 }
+      return handleError(
+        null,
+        `حجم الملف (${(file.size / (1024 * 1024)).toFixed(2)} ميجابايت) يتجاوز الحد الأقصى المسموح به (${MAX_FILE_SIZE_MB} ميجابايت)`,
+        400,
+        ErrorType.VALIDATION
       );
     }
 
     // Validate file type
     if (!ALLOWED_FILE_TYPES.includes(file.type) && file.type !== "") {
-      return NextResponse.json(
-        { error: "نوع الملف غير مدعوم" },
-        { status: 400 }
+      return handleError(
+        null,
+        `نوع الملف (${file.type}) غير مدعوم. الأنواع المدعومة: PDF, Word, ZIP, RAR, JPEG, PNG`,
+        400,
+        ErrorType.VALIDATION
       );
     }
 
     // Get the participant ID from the JWT token
     const cookieStore = cookies();
-    const tokenCookie = cookieStore.get('token'); // Changed from 'auth-token' to 'token' to match login route
+    const tokenCookie = cookieStore.get('token');
 
     if (!tokenCookie) {
       console.log('No token cookie found in request');
-      return NextResponse.json(
-        { error: "يرجى تسجيل الدخول للتسليم" },
-        { status: 401 }
+      return handleError(
+        null,
+        "يرجى تسجيل الدخول للتسليم",
+        401,
+        ErrorType.AUTHENTICATION
       );
     }
 
@@ -82,12 +125,12 @@ export async function POST(request: NextRequest) {
 
     try {
       decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-      console.log('Decoded token:', decoded);
     } catch (err) {
-      console.error('Token verification failed:', err);
-      return NextResponse.json(
-        { error: "جلسة غير صالحة، يرجى تسجيل الدخول مرة أخرى" },
-        { status: 401 }
+      return handleError(
+        err,
+        "جلسة غير صالحة، يرجى تسجيل الدخول مرة أخرى",
+        401,
+        ErrorType.AUTHENTICATION
       );
     }
 
@@ -101,18 +144,21 @@ export async function POST(request: NextRequest) {
     });
     
     if (!participant) {
-      return NextResponse.json(
-        { error: "لم يتم العثور على المشارك" },
-        { status: 404 }
+      return handleError(
+        null,
+        "لم يتم العثور على المشارك",
+        404,
+        ErrorType.NOT_FOUND
       );
     }
 
     // Check if the participant is a team leader
     if (!participant.isLeader) {
-      console.log(`Participant ${participantId} is not a team leader. isLeader=${participant.isLeader}`);
-      return NextResponse.json(
-        { error: "فقط قائد الفريق يمكنه تسليم المشاريع" },
-        { status: 403 }
+      return handleError(
+        null,
+        "فقط قائد الفريق يمكنه تسليم المشاريع",
+        403,
+        ErrorType.AUTHORIZATION
       );
     }
 
@@ -121,9 +167,11 @@ export async function POST(request: NextRequest) {
       SELECT * FROM "Milestone" WHERE id = ${milestoneId}
     `;
     if (!milestone || (Array.isArray(milestone) && milestone.length === 0)) {
-      return NextResponse.json(
-        { error: "لم يتم العثور على المرحلة" },
-        { status: 404 }
+      return handleError(
+        null,
+        "لم يتم العثور على المرحلة",
+        404,
+        ErrorType.NOT_FOUND
       );
     }
 
@@ -134,9 +182,11 @@ export async function POST(request: NextRequest) {
     `;
     
     if (existingSubmission && Array.isArray(existingSubmission) && existingSubmission.length > 0) {
-      return NextResponse.json(
-        { error: "لقد قمت بتسليم هذا المشروع بالفعل ولا يمكنك التسليم مرة أخرى" },
-        { status: 400 }
+      return handleError(
+        null,
+        "لقد قمت بتسليم هذا المشروع بالفعل ولا يمكنك التسليم مرة أخرى",
+        400,
+        ErrorType.DUPLICATE
       );
     }
 
@@ -145,21 +195,74 @@ export async function POST(request: NextRequest) {
     const originalName = file.name;
     const fileName = `${timestamp}_${originalName}`;
     
-    // Upload file to blob storage in 'milestones' folder
-    const filePath = await uploadToBlob(file, fileName, 'milestones');
+    // Upload file to blob storage with timeout handling
+    console.log(`Starting file upload to Vercel Blob: ${fileName}`);
+    uploadStartTime = Date.now();
+    
+    let filePath: string;
+    try {
+      // Set a timeout for the upload operation
+      const uploadPromise = uploadToBlob(file, fileName, 'milestones');
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Upload timeout')), 280000); // 4 minutes 40 seconds
+      });
+      
+      // Race between upload and timeout
+      filePath = await Promise.race([uploadPromise, timeoutPromise]);
+      
+      uploadEndTime = Date.now();
+      console.log(`File upload completed in ${(uploadEndTime - uploadStartTime) / 1000} seconds. URL: ${filePath}`);
+    } catch (uploadError: any) {
+      if (uploadError.message === 'Upload timeout') {
+        return handleError(
+          uploadError,
+          "انتهت مهلة رفع الملف. قد يكون حجم الملف كبيرًا جدًا أو اتصال الإنترنت بطيء.",
+          408,
+          ErrorType.TIMEOUT
+        );
+      }
+      
+      // Check for specific Vercel Blob errors
+      if (uploadError.name === 'BlobError') {
+        return handleError(
+          uploadError,
+          "حدث خطأ أثناء رفع الملف إلى التخزين السحابي. يرجى المحاولة مرة أخرى.",
+          500,
+          ErrorType.UPLOAD
+        );
+      }
+      
+      return handleError(
+        uploadError,
+        "فشل رفع الملف. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
+        500,
+        ErrorType.UPLOAD
+      );
+    }
 
     // Create a new milestone submission in the database
-    const submission = await prisma.$executeRaw`
-      INSERT INTO "MilestoneSubmission" (id, "participantId", "milestoneId", "filePath", "fileName", "submittedAt")
-      VALUES (${crypto.randomUUID()}, ${participant.id}, ${milestoneId}, ${filePath}, ${originalName}, ${new Date().toISOString()}::timestamp)
-    `;
+    try {
+      const submission = await prisma.$executeRaw`
+        INSERT INTO "MilestoneSubmission" (id, "participantId", "milestoneId", "filePath", "fileName", "submittedAt")
+        VALUES (${crypto.randomUUID()}, ${participant.id}, ${milestoneId}, ${filePath}, ${originalName}, ${new Date().toISOString()}::timestamp)
+      `;
 
-    // Update the milestone submission count
-    await prisma.$executeRaw`
-      UPDATE "Milestone"
-      SET "submissionCount" = "submissionCount" + 1
-      WHERE id = ${milestoneId}
-    `;
+      // Update the milestone submission count
+      await prisma.$executeRaw`
+        UPDATE "Milestone"
+        SET "submissionCount" = "submissionCount" + 1
+        WHERE id = ${milestoneId}
+      `;
+      
+      console.log(`Database records created successfully for submission by participant ${participantId}`);
+    } catch (dbError) {
+      return handleError(
+        dbError,
+        "حدث خطأ أثناء حفظ بيانات التسليم في قاعدة البيانات",
+        500,
+        ErrorType.DATABASE
+      );
+    }
 
     // Create notification for admins about new milestone submission
     try {
@@ -183,16 +286,43 @@ export async function POST(request: NextRequest) {
       // Don't fail the submission if notification fails
     }
 
+    const totalTime = Date.now() - startTime;
+    console.log(`Total submission process completed in ${totalTime / 1000} seconds`);
+
     return NextResponse.json({
       success: true,
       message: "تم تسليم المشروع بنجاح",
-      submission,
+      fileSize: `${(file.size / (1024 * 1024)).toFixed(2)} ميجابايت`,
+      uploadTime: `${(uploadEndTime - uploadStartTime) / 1000} ثانية`,
+      totalTime: `${totalTime / 1000} ثانية`
     });
-  } catch (error) {
-    console.error("Error submitting milestone:", error);
-    return NextResponse.json(
-      { error: "حدث خطأ أثناء تسليم المشروع" },
-      { status: 500 }
+  } catch (error: any) {
+    // Check for timeout errors
+    if (error.name === 'TimeoutError' || error.message?.includes('timeout')) {
+      return handleError(
+        error,
+        "انتهت مهلة العملية. قد يكون حجم الملف كبيرًا جدًا أو اتصال الإنترنت بطيء.",
+        408,
+        ErrorType.TIMEOUT
+      );
+    }
+    
+    // Check for network errors
+    if (error.name === 'NetworkError' || error.message?.includes('network')) {
+      return handleError(
+        error,
+        "حدث خطأ في الاتصال بالشبكة. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
+        503,
+        ErrorType.UPLOAD
+      );
+    }
+    
+    // Generic error handler
+    return handleError(
+      error,
+      "حدث خطأ غير متوقع أثناء تسليم المشروع. يرجى المحاولة مرة أخرى.",
+      500,
+      ErrorType.UNKNOWN
     );
   }
 }

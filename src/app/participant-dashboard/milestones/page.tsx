@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, FileText, CheckCircle, AlertCircle, Loader2, Upload, X } from "lucide-react";
+import { Clock, FileText, CheckCircle, AlertCircle, Loader2, Upload, X, RefreshCw, Info } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import Link from "next/link";
@@ -10,6 +10,7 @@ import { useEffect, useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Progress } from "@/components/ui/progress";
 
 // Define the Milestone type
 type Milestone = {
@@ -34,6 +35,22 @@ type SubmissionResponse = {
   submission?: any;
 };
 
+// Maximum file size in bytes (25MB)
+const MAX_FILE_SIZE = 25 * 1024 * 1024;
+const MAX_FILE_SIZE_MB = 25;
+
+// Allowed file types
+const ALLOWED_FILE_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/zip",
+  "application/x-zip-compressed",
+  "application/vnd.rar",
+  "image/jpeg",
+  "image/png",
+];
+
 export default function ParticipantMilestonesPage() {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,6 +61,11 @@ export default function ParticipantMilestonesPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [showProgress, setShowProgress] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 3;
 
   // Fetch milestones from API
   useEffect(() => {
@@ -123,17 +145,69 @@ export default function ParticipantMilestonesPage() {
     setSelectedMilestone(milestone);
     setSelectedFile(null);
     setSubmissionStatus(null);
+    setFileError(null);
+    setUploadProgress(0);
+    setShowProgress(false);
+    setRetryCount(0);
     setIsDialogOpen(true);
+  };
+
+  // Format file size to human-readable format
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+  };
+
+  // Validate file before upload
+  const validateFile = (file: File): string | null => {
+    // Check file size
+    if (file.size > MAX_FILE_SIZE) {
+      return `حجم الملف (${formatFileSize(file.size)}) يتجاوز الحد الأقصى المسموح به (${MAX_FILE_SIZE_MB} ميجابايت)`;
+    }
+
+    // Check file type
+    if (!ALLOWED_FILE_TYPES.includes(file.type) && file.type !== "") {
+      return "نوع الملف غير مدعوم. الأنواع المدعومة: PDF, Word, ZIP, RAR, JPEG, PNG";
+    }
+
+    return null;
   };
 
   // Handle file selection
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      const error = validateFile(file);
+      
+      if (error) {
+        setFileError(error);
+        setSelectedFile(null);
+      } else {
+        setSelectedFile(file);
+        setFileError(null);
+      }
     }
   };
 
-  // Submit a milestone
+  // Create a simulated progress updater
+  const simulateProgress = () => {
+    setShowProgress(true);
+    setUploadProgress(0);
+    
+    const interval = setInterval(() => {
+      setUploadProgress(prev => {
+        // Slow down progress as it gets closer to 90%
+        const increment = prev < 30 ? 5 : prev < 60 ? 3 : prev < 80 ? 1 : 0.5;
+        const newProgress = Math.min(prev + increment, 90);
+        return newProgress;
+      });
+    }, 300);
+    
+    return interval;
+  };
+
+  // Submit a milestone with retry logic
   const submitMilestone = async () => {
     if (!selectedMilestone || !selectedFile) {
       setSubmissionStatus({
@@ -143,18 +217,42 @@ export default function ParticipantMilestonesPage() {
       return;
     }
 
+    // Validate file again before upload
+    const validationError = validateFile(selectedFile);
+    if (validationError) {
+      setFileError(validationError);
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmissionStatus(null);
+    setFileError(null);
+    
+    // Start progress simulation
+    const progressInterval = simulateProgress();
 
     try {
       const formData = new FormData();
       formData.append("milestoneId", selectedMilestone.id);
       formData.append("file", selectedFile);
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 290000); // 4 minutes 50 seconds timeout
+
       const response = await fetch("/api/participant/submit-milestone", {
         method: "POST",
         body: formData,
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
+      
+      // Complete the progress bar
+      clearInterval(progressInterval);
+      setUploadProgress(100);
+      
+      // Delay to show 100% completion
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const result: SubmissionResponse = await response.json();
 
@@ -174,6 +272,7 @@ export default function ParticipantMilestonesPage() {
         // Close the dialog after a delay
         setTimeout(() => {
           setIsDialogOpen(false);
+          setShowProgress(false);
         }, 2000);
       } else {
         // Handle specific error for duplicate submission
@@ -193,16 +292,58 @@ export default function ParticipantMilestonesPage() {
           success: false,
           message: errorMessage
         });
+        
+        setShowProgress(false);
       }
     } catch (err) {
       console.error("Error submitting milestone:", err);
-      setSubmissionStatus({
-        success: false,
-        message: "حدث خطأ أثناء الاتصال بالخادم"
-      });
+      
+      // Clear progress interval
+      clearInterval(progressInterval);
+      
+      // Check if it's an abort error (timeout)
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setSubmissionStatus({
+          success: false,
+          message: "انتهت مهلة الاتصال. قد يكون حجم الملف كبيرًا جدًا أو اتصال الإنترنت بطيء."
+        });
+      } else {
+        // Handle other errors and implement retry logic
+        if (retryCount < maxRetries) {
+          setSubmissionStatus({
+            success: false,
+            message: `حدث خطأ أثناء الاتصال بالخادم. جاري إعادة المحاولة (${retryCount + 1}/${maxRetries})...`
+          });
+          
+          // Increment retry count
+          setRetryCount(prev => prev + 1);
+          
+          // Retry after a delay
+          setTimeout(() => {
+            submitMilestone();
+          }, 2000);
+        } else {
+          setSubmissionStatus({
+            success: false,
+            message: "فشلت عملية التسليم بعد عدة محاولات. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى."
+          });
+          setShowProgress(false);
+        }
+      }
     } finally {
-      setIsSubmitting(false);
+      if (retryCount >= maxRetries) {
+        setIsSubmitting(false);
+      }
     }
+  };
+
+  // Reset and retry upload
+  const retryUpload = () => {
+    setRetryCount(0);
+    setUploadProgress(0);
+    setShowProgress(false);
+    setSubmissionStatus(null);
+    submitMilestone();
   };
 
   return (
@@ -281,7 +422,9 @@ export default function ParticipantMilestonesPage() {
       )}
 
       {/* File Upload Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => {
+        if (!isSubmitting) setIsDialogOpen(open);
+      }}>
         <DialogContent className="max-w-[90vw] sm:max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle>تسليم المشروع</DialogTitle>
@@ -302,6 +445,7 @@ export default function ParticipantMilestonesPage() {
                   ref={fileInputRef}
                   onChange={handleFileChange}
                   className="flex-1"
+                  disabled={isSubmitting}
                 />
               </div>
               <p className="text-xs text-muted-foreground">
@@ -309,49 +453,96 @@ export default function ParticipantMilestonesPage() {
               </p>
             </div>
 
-            {selectedFile && (
-              <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
-                <FileText className="h-4 w-4 text-primary" />
-                <span className="text-sm flex-1 truncate">{selectedFile.name}</span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setSelectedFile(null)}
-                  className="h-6 w-6"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+            {fileError && (
+              <div className="p-3 rounded-md bg-amber-50 text-amber-600 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <p className="text-sm">{fileError}</p>
+              </div>
+            )}
+
+            {selectedFile && !fileError && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 p-2 bg-muted rounded-md">
+                  <FileText className="h-4 w-4 text-primary" />
+                  <span className="text-sm flex-1 truncate">{selectedFile.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatFileSize(selectedFile.size)}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setSelectedFile(null)}
+                    className="h-6 w-6"
+                    disabled={isSubmitting}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+                
+                <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-md">
+                  <Info className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                  <p className="text-xs text-blue-600">
+                    قد تستغرق عملية رفع الملفات الكبيرة وقتًا أطول. يرجى عدم إغلاق هذه النافذة أثناء الرفع.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {showProgress && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>جاري رفع الملف...</span>
+                  <span>{Math.round(uploadProgress)}%</span>
+                </div>
+                <Progress value={uploadProgress} className="h-2" />
               </div>
             )}
 
             {submissionStatus && (
               <div className={`p-3 rounded-md ${
                 submissionStatus.success ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'
-              }`}>
+              } flex items-start gap-2`}>
+                {submissionStatus.success ? (
+                  <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                )}
                 <p className="text-sm">{submissionStatus.message}</p>
               </div>
             )}
           </div>
           
           <DialogFooter className="flex-col sm:flex-row sm:justify-start gap-2">
-            <Button
-              type="submit"
-              onClick={submitMilestone}
-              disabled={!selectedFile || isSubmitting}
-              className="gap-2 w-full sm:w-auto order-1 sm:order-none"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  جاري التسليم...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4" />
-                  تأكيد التسليم
-                </>
-              )}
-            </Button>
+            {submissionStatus && !submissionStatus.success && retryCount >= maxRetries ? (
+              <Button
+                type="button"
+                onClick={retryUpload}
+                className="gap-2 w-full sm:w-auto"
+                disabled={isSubmitting}
+              >
+                <RefreshCw className="h-4 w-4" />
+                إعادة المحاولة
+              </Button>
+            ) : (
+              <Button
+                type="submit"
+                onClick={submitMilestone}
+                disabled={!selectedFile || isSubmitting || !!fileError}
+                className="gap-2 w-full sm:w-auto order-1 sm:order-none"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    جاري التسليم...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    تأكيد التسليم
+                  </>
+                )}
+              </Button>
+            )}
             <Button
               type="button"
               variant="outline"
