@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Clock, FileText, CheckCircle, AlertCircle, Loader2, Upload, X, RefreshCw, Info } from "lucide-react";
+import { Clock, FileText, CheckCircle, AlertCircle, Loader2, Upload, X, RefreshCw, Info, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
 import Link from "next/link";
@@ -35,35 +35,13 @@ type SubmissionResponse = {
   submission?: any;
 };
 
-// Define the validation response type
-type ValidationResponse = {
-  success: boolean;
-  validationPassed: boolean;
-  fileName: string;
-  originalFileName: string;
-  milestoneId: string;
-  submissionId: string;
-  participantId: string;
-  teamName: string;
-  maxChunkSize: number;
-  path: string;
-  error?: string;
-};
-
-// Define the chunk upload response type
-type ChunkUploadResponse = {
-  success: boolean;
-  message: string;
-  chunkIndex?: number;
-  totalChunks?: number;
-  isComplete?: boolean;
-  url?: string;
-  error?: string;
-};
-
 // Maximum file size in bytes (25MB)
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const MAX_FILE_SIZE_MB = 25;
+
+// Small file size limit for direct upload (4MB)
+const SMALL_FILE_SIZE_LIMIT = 4 * 1024 * 1024;
+const SMALL_FILE_SIZE_LIMIT_MB = 4;
 
 // Allowed file types
 const ALLOWED_FILE_TYPES = [
@@ -76,9 +54,6 @@ const ALLOWED_FILE_TYPES = [
   "image/jpeg",
   "image/png",
 ];
-
-// Default chunk size (4MB)
-const DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;
 
 export default function ParticipantMilestonesPage() {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
@@ -94,8 +69,7 @@ export default function ParticipantMilestonesPage() {
   const [showProgress, setShowProgress] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [currentChunk, setCurrentChunk] = useState(0);
-  const [totalChunks, setTotalChunks] = useState(0);
+  const [isLargeFile, setIsLargeFile] = useState(false);
   const maxRetries = 3;
 
   // Fetch milestones from API
@@ -180,8 +154,7 @@ export default function ParticipantMilestonesPage() {
     setUploadProgress(0);
     setShowProgress(false);
     setRetryCount(0);
-    setCurrentChunk(0);
-    setTotalChunks(0);
+    setIsLargeFile(false);
     setIsDialogOpen(true);
   };
 
@@ -216,28 +189,35 @@ export default function ParticipantMilestonesPage() {
       if (error) {
         setFileError(error);
         setSelectedFile(null);
+        setIsLargeFile(false);
       } else {
         setSelectedFile(file);
         setFileError(null);
+        
+        // Check if it's a large file
+        setIsLargeFile(file.size > SMALL_FILE_SIZE_LIMIT);
       }
     }
   };
 
-  // Split file into chunks
-  const splitFileIntoChunks = (file: File, chunkSize: number): Blob[] => {
-    const chunks: Blob[] = [];
-    let start = 0;
+  // Create a simulated progress updater
+  const simulateProgress = () => {
+    setShowProgress(true);
+    setUploadProgress(0);
     
-    while (start < file.size) {
-      const end = Math.min(start + chunkSize, file.size);
-      chunks.push(file.slice(start, end));
-      start = end;
-    }
+    const interval = setInterval(() => {
+      setUploadProgress(prev => {
+        // Slow down progress as it gets closer to 90%
+        const increment = prev < 30 ? 5 : prev < 60 ? 3 : prev < 80 ? 1 : 0.5;
+        const newProgress = Math.min(prev + increment, 90);
+        return newProgress;
+      });
+    }, 300);
     
-    return chunks;
+    return interval;
   };
 
-  // Submit a milestone with chunked upload
+  // Submit a milestone
   const submitMilestone = async () => {
     if (!selectedMilestone || !selectedFile) {
       setSubmissionStatus({
@@ -257,134 +237,100 @@ export default function ParticipantMilestonesPage() {
     setIsSubmitting(true);
     setSubmissionStatus(null);
     setFileError(null);
-    setShowProgress(true);
-    setUploadProgress(0);
     
+    // Start progress simulation
+    const progressInterval = simulateProgress();
+
     try {
-      // Step 1: Validate the file and get submission details
-      const validationData = {
-        fileName: selectedFile.name,
-        fileType: selectedFile.type,
-        fileSize: selectedFile.size,
-        milestoneId: selectedMilestone.id
-      };
-      
-      console.log("Validating file...");
-      setSubmissionStatus({
-        success: true,
-        message: "جاري التحقق من صحة الملف..."
-      });
-      
-      const validationResponse = await fetch("/api/participant/get-upload-url", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(validationData)
-      });
-      
-      if (!validationResponse.ok) {
-        const errorData = await validationResponse.json();
-        throw new Error(errorData.error || "فشل التحقق من صحة الملف");
-      }
-      
-      const validationResult: ValidationResponse = await validationResponse.json();
-      
-      if (!validationResult.success) {
-        throw new Error(validationResult.error || "فشل التحقق من صحة الملف");
-      }
-      
-      console.log("File validation successful. Preparing for upload...");
-      
-      // Step 2: Split the file into chunks
-      const chunkSize = validationResult.maxChunkSize || DEFAULT_CHUNK_SIZE;
-      const chunks = splitFileIntoChunks(selectedFile, chunkSize);
-      setTotalChunks(chunks.length);
-      
-      console.log(`File split into ${chunks.length} chunks of ${formatFileSize(chunkSize)} each`);
-      setSubmissionStatus({
-        success: true,
-        message: `جاري تحضير الملف للرفع (${chunks.length} أجزاء)...`
-      });
-      
-      // Step 3: Upload each chunk
-      for (let i = 0; i < chunks.length; i++) {
-        setCurrentChunk(i);
-        const progressPercentage = Math.round((i / chunks.length) * 100);
-        setUploadProgress(progressPercentage);
-        
-        setSubmissionStatus({
-          success: true,
-          message: `جاري رفع الجزء ${i + 1} من ${chunks.length}...`
-        });
-        
-        const chunkFormData = new FormData();
-        chunkFormData.append("chunk", chunks[i]);
-        chunkFormData.append("chunkIndex", i.toString());
-        chunkFormData.append("totalChunks", chunks.length.toString());
-        chunkFormData.append("fileName", validationResult.fileName);
-        chunkFormData.append("originalFileName", validationResult.originalFileName);
-        chunkFormData.append("milestoneId", validationResult.milestoneId);
-        chunkFormData.append("submissionId", validationResult.submissionId);
-        chunkFormData.append("path", validationResult.path);
-        
-        console.log(`Uploading chunk ${i + 1}/${chunks.length}`);
-        
-        const chunkResponse = await fetch("/api/participant/upload-chunk", {
+      // For small files, use the direct upload endpoint
+      if (selectedFile.size <= SMALL_FILE_SIZE_LIMIT) {
+        const formData = new FormData();
+        formData.append("milestoneId", selectedMilestone.id);
+        formData.append("file", selectedFile);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 290000); // 4 minutes 50 seconds timeout
+
+        const response = await fetch("/api/participant/submit-small-file", {
           method: "POST",
-          body: chunkFormData
+          body: formData,
+          signal: controller.signal
         });
+
+        clearTimeout(timeoutId);
         
-        if (!chunkResponse.ok) {
-          const errorData = await chunkResponse.json();
-          throw new Error(errorData.error || `فشل رفع الجزء ${i + 1}`);
-        }
+        // Complete the progress bar
+        clearInterval(progressInterval);
+        setUploadProgress(100);
         
-        const chunkResult: ChunkUploadResponse = await chunkResponse.json();
-        
-        if (!chunkResult.success) {
-          throw new Error(chunkResult.error || `فشل رفع الجزء ${i + 1}`);
-        }
-        
-        // If this is the last chunk and upload is complete
-        if (chunkResult.isComplete) {
-          console.log("All chunks uploaded successfully!");
-          setUploadProgress(100);
+        // Delay to show 100% completion
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        if (!response.ok) {
+          // Check if it's a 413 Content Too Large error
+          if (response.status === 413) {
+            throw new Error("413 Content Too Large");
+          }
           
+          const errorData = await response.json();
+          throw new Error(errorData.error || "حدث خطأ أثناء تسليم المشروع");
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
           setSubmissionStatus({
             success: true,
-            message: "تم تسليم المشروع بنجاح"
+            message: result.message || "تم تسليم المشروع بنجاح"
           });
-          
+
           // Update the milestone status in the UI
           setMilestones(milestones.map(m => 
             m.id === selectedMilestone.id 
               ? { ...m, hasSubmitted: true, submissionCount: m.submissionCount + 1 } 
               : m
           ));
-          
+
           // Close the dialog after a delay
           setTimeout(() => {
             setIsDialogOpen(false);
             setShowProgress(false);
           }, 2000);
+        } else {
+          setSubmissionStatus({
+            success: false,
+            message: result.error || "حدث خطأ أثناء تسليم المشروع"
+          });
           
-          break;
+          setShowProgress(false);
         }
+      } else {
+        // For larger files, show a message suggesting to compress the file
+        clearInterval(progressInterval);
+        setUploadProgress(0);
+        setShowProgress(false);
+        
+        setSubmissionStatus({
+          success: false,
+          message: `حجم الملف (${formatFileSize(selectedFile.size)}) يتجاوز الحد الأقصى المسموح به للرفع المباشر (${SMALL_FILE_SIZE_LIMIT_MB} ميجابايت). يرجى ضغط الملف أو تقسيمه إلى ملفات أصغر.`
+        });
       }
     } catch (err) {
       console.error("Error submitting milestone:", err);
       
-      // Check if it's a 413 Content Too Large error
-      if (err instanceof Error && err.message.includes("413")) {
-        setSubmissionStatus({
-          success: false,
-          message: "حجم الملف كبير جدًا. يرجى تقليل حجم الملف والمحاولة مرة أخرى."
-        });
-      } else if (err instanceof DOMException && err.name === "AbortError") {
+      // Clear progress interval
+      clearInterval(progressInterval);
+      
+      // Check if it's an abort error (timeout)
+      if (err instanceof DOMException && err.name === "AbortError") {
         setSubmissionStatus({
           success: false,
           message: "انتهت مهلة الاتصال. قد يكون حجم الملف كبيرًا جدًا أو اتصال الإنترنت بطيء."
+        });
+      } else if (err instanceof Error && err.message === "413 Content Too Large") {
+        setSubmissionStatus({
+          success: false,
+          message: "حجم الملف كبير جدًا. يرجى ضغط الملف أو تقسيمه إلى ملفات أصغر."
         });
       } else {
         // Handle other errors and implement retry logic
@@ -406,6 +352,7 @@ export default function ParticipantMilestonesPage() {
             success: false,
             message: "فشلت عملية التسليم بعد عدة محاولات. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى."
           });
+          setShowProgress(false);
         }
       }
     } finally {
@@ -421,8 +368,6 @@ export default function ParticipantMilestonesPage() {
     setUploadProgress(0);
     setShowProgress(false);
     setSubmissionStatus(null);
-    setCurrentChunk(0);
-    setTotalChunks(0);
     submitMilestone();
   };
 
@@ -531,6 +476,9 @@ export default function ParticipantMilestonesPage() {
               <p className="text-xs text-muted-foreground">
                 الملفات المدعومة: PDF, Word, ZIP, RAR, JPEG, PNG (الحد الأقصى: 25 ميجابايت)
               </p>
+              <p className="text-xs text-amber-600">
+                ملاحظة: الملفات التي يزيد حجمها عن {SMALL_FILE_SIZE_LIMIT_MB} ميجابايت قد تواجه مشاكل في الرفع. يرجى ضغط الملفات الكبيرة.
+              </p>
             </div>
 
             {fileError && (
@@ -559,6 +507,15 @@ export default function ParticipantMilestonesPage() {
                   </Button>
                 </div>
                 
+                {isLargeFile && (
+                  <div className="flex items-center gap-2 p-2 bg-amber-50 rounded-md">
+                    <AlertCircle className="h-4 w-4 text-amber-600 flex-shrink-0" />
+                    <p className="text-xs text-amber-600">
+                      هذا ملف كبير ({formatFileSize(selectedFile.size)}). قد تواجه مشاكل في الرفع. يرجى ضغط الملف أو تقسيمه إلى ملفات أصغر.
+                    </p>
+                  </div>
+                )}
+                
                 <div className="flex items-center gap-2 p-2 bg-blue-50 rounded-md">
                   <Info className="h-4 w-4 text-blue-600 flex-shrink-0" />
                   <p className="text-xs text-blue-600">
@@ -571,11 +528,7 @@ export default function ParticipantMilestonesPage() {
             {showProgress && (
               <div className="space-y-2">
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>
-                    {totalChunks > 0 
-                      ? `جاري رفع الجزء ${currentChunk + 1} من ${totalChunks}` 
-                      : 'جاري رفع الملف...'}
-                  </span>
+                  <span>جاري رفع الملف...</span>
                   <span>{Math.round(uploadProgress)}%</span>
                 </div>
                 <Progress value={uploadProgress} className="h-2" />
