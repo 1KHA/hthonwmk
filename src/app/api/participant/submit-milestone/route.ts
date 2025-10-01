@@ -179,9 +179,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate a unique filename
+    // Generate a unique filename with sanitized name
     const timestamp = Date.now();
-    const uniqueFileName = `${timestamp}_${fileName}`;
+    // Sanitize filename by removing/replacing problematic characters
+    const sanitizedFileName = fileName
+      .replace(/[^\w\s.-]/g, '') // Remove non-alphanumeric characters except spaces, dots, and hyphens
+      .replace(/\s+/g, '_') // Replace spaces with underscores
+      .replace(/_{2,}/g, '_') // Replace multiple underscores with single underscore
+      .trim();
+    
+    // If sanitization results in empty filename, use a default
+    const finalFileName = sanitizedFileName || 'file';
+    const uniqueFileName = `${timestamp}_${finalFileName}`;
     const folderPath = 'milestones';
     
     // Generate signed URL for direct upload to Supabase

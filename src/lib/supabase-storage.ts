@@ -121,20 +121,22 @@ export async function getSignedUploadUrl(filename: string, folder: string = '') 
     
     console.log(`Generating signed URL for path: ${path}`);
     
-    // Generate a signed URL with options
+    // Generate a signed URL with minimal options to avoid conflicts
     const { data, error } = await supabaseAdmin
       .storage
       .from(BUCKET_NAME)
-      .createSignedUploadUrl(path, {
-        upsert: false
-      });
+      .createSignedUploadUrl(path);
     
     if (error) {
       console.error('Error generating signed URL:', error);
       throw new Error(`Failed to generate signed URL: ${error.message}`);
     }
     
-    console.log('Signed URL generated successfully:', data);
+    console.log('Signed URL generated successfully:', {
+      signedUrl: data.signedUrl ? 'Generated' : 'Missing',
+      path: data.path,
+      token: data.token ? 'Present' : 'Missing'
+    });
     
     // Get the public URL
     const { data: { publicUrl } } = supabaseAdmin
@@ -145,7 +147,8 @@ export async function getSignedUploadUrl(filename: string, folder: string = '') 
     return {
       signedUrl: data.signedUrl,
       path: data.path,
-      publicUrl
+      publicUrl,
+      token: data.token
     };
   } catch (error) {
     console.error('Error generating signed URL:', error);
