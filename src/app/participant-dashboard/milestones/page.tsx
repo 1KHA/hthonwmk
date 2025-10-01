@@ -153,7 +153,7 @@ export default function ParticipantMilestonesPage() {
 
     // Check file type
     if (!ALLOWED_FILE_TYPES.includes(file.type) && file.type !== "") {
-      return "نوع الملف غير مدعوم. الأنواع المدعومة: PDF, Word, ZIP, RAR, JPEG, PNG";
+      return "نوع الملف غير مدعوم. الأنواع المدعومة: PDF, Word, PPTX, ZIP, RAR, JPEG, PNG";
     }
 
     return null;
@@ -457,7 +457,7 @@ export default function ParticipantMilestonesPage() {
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                الملفات المدعومة: PDF, Word, ZIP, RAR, JPEG, PNG (الحد الأقصى: {MAX_FILE_SIZE_MB} ميجابايت)
+                الملفات المدعومة: PDF, Word, PPTX, ZIP, RAR, JPEG, PNG (الحد الأقصى: {MAX_FILE_SIZE_MB} ميجابايت)
               </p>
             </div>
 

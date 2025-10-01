@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     if (!ALLOWED_FILE_TYPES.includes(file.type) && file.type !== "") {
       return handleError(
         null,
-        `نوع الملف (${file.type}) غير مدعوم. الأنواع المدعومة: PDF, Word, ZIP, RAR, JPEG, PNG`,
+        `نوع الملف (${file.type}) غير مدعوم. الأنواع المدعومة: PDF, Word, PPTX, ZIP, RAR, JPEG, PNG`,
         400,
         ErrorType.VALIDATION
       );
