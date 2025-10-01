@@ -4,13 +4,9 @@ const nextConfig = {
   swcMinify: true,
   api: {
     bodyParser: {
-      sizeLimit: '30mb', // Increased to handle 25MB files plus overhead
+      sizeLimit: '10mb', // Increase the body parser size limit
     },
-    responseLimit: '30mb', // Increased response size limit
-  },
-  experimental: {
-    // Increase the maximum request body size for App Router
-    serverComponentsExternalPackages: [],
+    responseLimit: '10mb', // Increase the response size limit
   },
 };
 
