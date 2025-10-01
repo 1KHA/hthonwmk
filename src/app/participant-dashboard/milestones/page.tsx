@@ -192,7 +192,7 @@ export default function ParticipantMilestonesPage() {
     return interval;
   };
 
-  // Submit a milestone using direct upload to Supabase
+  // Submit a milestone using direct API upload (works for all file sizes)
   const submitMilestone = async () => {
     if (!selectedMilestone || !selectedFile) {
       setSubmissionStatus({
@@ -217,58 +217,15 @@ export default function ParticipantMilestonesPage() {
     const progressInterval = simulateProgress();
 
     try {
-      // Step 1: Get a signed URL for direct upload
-      const getSignedUrlResponse = await fetch("/api/participant/get-signed-url", {
+      // Create FormData for direct API upload
+      const formData = new FormData();
+      formData.append('milestoneId', selectedMilestone.id);
+      formData.append('file', selectedFile);
+
+      // Direct upload to API endpoint (works for all file sizes)
+      const uploadResponse = await fetch("/api/participant/submit-milestone", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          milestoneId: selectedMilestone.id,
-          fileName: selectedFile.name,
-          fileType: selectedFile.type
-        })
-      });
-
-      if (!getSignedUrlResponse.ok) {
-        const errorData = await getSignedUrlResponse.json();
-        throw new Error(errorData.error || "حدث خطأ أثناء الحصول على رابط الرفع");
-      }
-
-      const signedUrlData = await getSignedUrlResponse.json();
-      
-      if (!signedUrlData.success || !signedUrlData.signedUrl) {
-        throw new Error("فشل الحصول على رابط الرفع");
-      }
-
-      // Step 2: Upload the file directly to Supabase using the signed URL
-      const uploadResponse = await fetch(signedUrlData.signedUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": selectedFile.type || "application/octet-stream",
-        },
-        body: selectedFile
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("فشل رفع الملف إلى الخادم");
-      }
-
-      // Update progress to 80% after successful upload
-      setUploadProgress(80);
-
-      // Step 3: Record the submission in our database
-      const recordSubmissionResponse = await fetch("/api/participant/record-submission", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          milestoneId: selectedMilestone.id,
-          filePath: signedUrlData.path,
-          fileName: selectedFile.name,
-          publicUrl: signedUrlData.publicUrl
-        })
+        body: formData
       });
 
       // Complete the progress bar
@@ -278,12 +235,12 @@ export default function ParticipantMilestonesPage() {
       // Delay to show 100% completion
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      if (!recordSubmissionResponse.ok) {
-        const errorData = await recordSubmissionResponse.json();
-        throw new Error(errorData.error || "حدث خطأ أثناء تسجيل التسليم");
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.error || "حدث خطأ أثناء تسليم المشروع");
       }
 
-      const result = await recordSubmissionResponse.json();
+      const result = await uploadResponse.json();
 
       if (result.success) {
         setSubmissionStatus({
