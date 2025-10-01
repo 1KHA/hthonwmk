@@ -245,9 +245,6 @@ export default function ParticipantMilestonesPage() {
       // Step 2: Upload the file directly to Supabase using the signed URL
       const uploadResponse = await fetch(signedUrlData.signedUrl, {
         method: "PUT",
-        headers: {
-          "Content-Type": selectedFile.type || "application/octet-stream",
-        },
         body: selectedFile
       });
 
